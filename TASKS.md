@@ -195,13 +195,13 @@ Zależy od: NED-01, NED-02, NED-03.
 
 ## NED-05 (P1) Podwodny skybox / cubemapa (~4h) - tydzień 1 - METODA OBOWIĄZKOWA M6
 
-- [ ] 6 tekstur ścian cubemapy (głębokie niebiesko-zielone)
-- [ ] wczytanie przez `GL_TEXTURE_CUBE_MAP` (6 ścian)
-- [ ] `shaders/skybox.vert` + `.frag`
-- [ ] vertex shader: ucięcie translacji z view (`mat4(mat3(view))`), trik `pos.xyww`
-- [ ] fragment: próbka cubemapy wektorem kierunku
-- [ ] render z `GL_LEQUAL` i wyłączonym zapisem głębi
-- [ ] skybox nie rusza się z kamerą (tylko się obraca)
+- [x] 6 tekstur ścian cubemapy (głębokie niebiesko-zielone)
+- [x] wczytanie przez `GL_TEXTURE_CUBE_MAP` (6 ścian)
+- [x] `shaders/skybox.vert` + `.frag`
+- [x] vertex shader: ucięcie translacji z view (`mat4(mat3(view))`), trik `pos.xyww`
+- [x] fragment: próbka cubemapy wektorem kierunku
+- [x] render z `GL_LEQUAL` i wyłączonym zapisem głębi
+- [x] skybox nie rusza się z kamerą (tylko się obraca)
 
 Gotowe gdy: tło wygląda jak podwodne środowisko we wszystkie strony, skybox stoi przy ruchu kamery
 (tylko się obraca), góra jaśniejsza (słońce), dół ciemniejszy (głębia).
