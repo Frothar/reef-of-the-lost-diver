@@ -249,19 +249,20 @@ Projekt postawiony z frameworka z zajęć (cw 7) jako samodzielny projekt **Visu
 
 Gotowe. Reszta buduje na tym. Instrukcja: `UnderwaterScene/BUILD.md`.
 
-## MRZ-02 (P0) Kamera na kwaternionach (~5h) - tydzień 1 - METODA OBOWIĄZKOWA M3
+## MRZ-02 (DONE) Kamera na kwaternionach (~5h) - tydzień 1 - METODA OBOWIĄZKOWA M3
 
-- [ ] `src/Camera.h` / `.cpp`
-- [ ] orientacja jako `glm::quat`, pozycja jako `glm::vec3`
-- [ ] mysz → kwaterniony pitch/yaw → złożenie z aktualną orientacją
-- [ ] wektory forward/right/up z macierzy obrotu kwaternionu
-- [ ] view: `glm::lookAt(position, position + forward, up)`
-- [ ] ruch WSAD wzdłuż lokalnych osi
-- [ ] Spacja / LShift góra-dół
-- [ ] opcjonalnie Q/E przechył, lekkie kołysanie
+- [x] `src/QuaternionCamera.h` (klasa `Camera`, header-only, żeby nie kolidować z Core/Camera.h)
+- [x] orientacja jako `glm::quat`, pozycja jako `glm::vec3`
+- [x] mysz → kwaterniony yaw/pitch składane w lokalnym układzie (brak gimbal locka)
+- [x] wektory forward/right/up z orientacji
+- [x] view przez `glm::lookAt(position, position + front, up)`
+- [x] ruch WSAD wzdłuż lokalnych osi
+- [x] Spacja / Lewy Ctrl góra-dół (względem świata), Lewy Shift przyspieszenie
+- [x] Q/E przechył (roll) - to pokazuje sens kwaternionów (pełne 6DOF)
 
-Gotowe gdy: kamera obraca się gładko we wszystkie strony bez gimbal locka (patrzenie w górę i obrót
-w bok nie powoduje przeskoku), ruch jak pływanie (płynny, 6DOF).
+Gotowe: kamera obraca się gładko we wszystkie strony bez gimbal locka, da się obrócić "przez czubek
+głowy" bez przeskoku, ruch jak pływanie (6DOF). Wpięta w scenę zamiast tymczasowej kamery free-fly,
+zbudowane i przetestowane.
 
 Zależy od: MRZ-01.
 Materiały: [opengl-tutorial Quaternions](https://www.opengl-tutorial.org/intermediate-tutorials/tutorial-17-quaternions/).

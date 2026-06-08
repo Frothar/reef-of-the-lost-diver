@@ -31,6 +31,7 @@
     <ClInclude Include="src\Box.cpp" />
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\objload.h" />
+    <ClInclude Include="src\QuaternionCamera.h" />
     <ClInclude Include="src\Render_Utils.h" />
     <ClInclude Include="src\scene_underwater.hpp" />
     <ClInclude Include="src\Shader_Loader.h" />

@@ -2,13 +2,13 @@
 //
 // scene_underwater.hpp - starter scene for "Reef of the Lost Diver".
 //
-// This is the MRZ-01 baseline: a window that opens with an underwater
-// atmosphere, a working free-fly camera, a cubemap skybox and a couple of
-// lit test objects. It proves the framework (Shader_Loader, Render_Utils,
-// Texture, Camera, SOIL, Assimp, ImGui) is wired up correctly.
+// MRZ-01 baseline + MRZ-02 quaternion camera: a window with an underwater
+// atmosphere, the gimbal-lock-free quaternion camera, a cubemap skybox and a
+// couple of lit test objects. Proves the framework (Shader_Loader,
+// Render_Utils, Texture, Camera, SOIL, Assimp, ImGui) is wired up correctly.
 //
 // Team: replace/extend the placeholders below with your own modules:
-//   * Mroz    -> quaternion Camera (MRZ-02), Light system B13 (MRZ-05), particles
+//   * Mroz    -> Light system B13 (MRZ-05), particles (MRZ-07)
 //   * Nedzynski -> Spline + PTF (NED-01/02), fish swimming shader (NED-03), skybox polish
 //   * Olejnik -> PBR + normal + shadow mapping shaders (OLE-01..06)
 //
@@ -26,7 +26,8 @@
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
 #include "Texture.h"
-#include "Camera.h"
+#include "Camera.h"               // Core::createPerspectiveMatrix
+#include "QuaternionCamera.h"     // MRZ-02 quaternion camera
 
 #include "Box.cpp"
 #include <assimp/Importer.hpp>
@@ -69,12 +70,10 @@ namespace {
 
     float aspectRatio = 1.0f;
 
-    // --- Free-fly camera (placeholder for Mroz's quaternion camera) ----------
-    glm::vec3 cameraPos   = glm::vec3(0.0f, 1.0f, 6.0f);
-    glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-    glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
-    float yaw   = -90.0f;
-    float pitch = 0.0f;
+    // --- Quaternion camera (MRZ-02) ------------------------------------------
+    Camera camera = Camera(glm::vec3(0.0f, 1.0f, 6.0f));
+    float mouseSensitivity = 0.1f;
+    float rollSpeed = 60.0f; // stopnie/s dla Q/E
     bool  firstMouse = true;
     float lastX = 500.0f, lastY = 500.0f;
     bool  mouseLook = true;
@@ -87,11 +86,11 @@ namespace {
 }
 
 // ---------------------------------------------------------------------------
-// Camera / projection helpers (use the Core helpers from Camera.h)
+// Camera / projection helpers
 // ---------------------------------------------------------------------------
 inline glm::mat4 createCameraMatrix()
 {
-    return Core::createViewMatrix(cameraPos, glm::normalize(cameraFront), cameraUp);
+    return camera.viewMatrix();
 }
 
 inline glm::mat4 createPerspectiveMatrix()
@@ -111,7 +110,7 @@ inline void drawObject(Core::RenderContext& context, glm::mat4 modelMatrix, glm:
 
     glUniformMatrix4fv(glGetUniformLocation(programObject, "transformation"), 1, GL_FALSE, (float*)&transformation);
     glUniformMatrix4fv(glGetUniformLocation(programObject, "modelMatrix"),    1, GL_FALSE, (float*)&modelMatrix);
-    glUniform3fv(glGetUniformLocation(programObject, "cameraPos"),   1, (float*)&cameraPos);
+    glUniform3fv(glGetUniformLocation(programObject, "cameraPos"),   1, (float*)&camera.position);
     glUniform3fv(glGetUniformLocation(programObject, "lightDir"),    1, (float*)&sunDir);
     glUniform3fv(glGetUniformLocation(programObject, "lightColor"),  1, (float*)&sunColor);
     glUniform3fv(glGetUniformLocation(programObject, "objectColor"), 1, (float*)&color);
@@ -195,19 +194,12 @@ inline void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     if (!mouseLook) { firstMouse = true; return; }
     if (firstMouse) { lastX = (float)xpos; lastY = (float)ypos; firstMouse = false; }
 
-    float xoffset = ((float)xpos - lastX) * 0.1f;
-    float yoffset = (lastY - (float)ypos) * 0.1f;
+    float dx = ((float)xpos - lastX) * mouseSensitivity; // prawo dodatnie
+    float dy = (lastY - (float)ypos) * mouseSensitivity; // gora dodatnia
     lastX = (float)xpos; lastY = (float)ypos;
 
-    yaw   += xoffset;
-    pitch += yoffset;
-    pitch = glm::clamp(pitch, -89.0f, 89.0f);
-
-    glm::vec3 dir;
-    dir.x = std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch));
-    dir.y = std::sin(glm::radians(pitch));
-    dir.z = std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch));
-    cameraFront = glm::normalize(dir);
+    // yaw w prawo gdy mysz w prawo, pitch w gore gdy mysz w gore
+    camera.addYawPitch(-dx, dy);
 }
 
 inline void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -229,15 +221,20 @@ inline void processInput(GLFWwindow* window)
 
     float speed = 4.0f * dt;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) speed *= 3.0f;
+    float roll = rollSpeed * dt;
 
-    glm::vec3 right = glm::normalize(glm::cross(cameraFront, glm::vec3(0, 1, 0)));
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraPos += cameraFront * speed;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraPos -= cameraFront * speed;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraPos -= right * speed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraPos += right * speed;
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)      cameraPos += glm::vec3(0, 1, 0) * speed;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) cameraPos -= glm::vec3(0, 1, 0) * speed;
+    // ruch wzdluz lokalnych osi kamery
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.moveForward(speed);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.moveForward(-speed);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.moveRight(-speed);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.moveRight(speed);
+    // gora/dol wzgledem swiata (ku powierzchni / w glab)
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)        camera.moveWorldUp(speed);
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) camera.moveWorldUp(-speed);
+    // przechyl (roll)
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) camera.addRoll(roll);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) camera.addRoll(-roll);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,14 +301,20 @@ inline void renderLoop(GLFWwindow* window)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin("Scene Controls");
+        ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("TAB: toggle mouse-look / UI");
+        ImGui::Text("WSAD ruch, Q/E przechyl, Spacja/Ctrl gora-dol");
+        ImGui::Text("TAB: mysz <-> panel");
+        ImGui::Separator();
+        ImGui::Text("Kamera: %6.1f %6.1f %6.1f", camera.position.x, camera.position.y, camera.position.z);
+        ImGui::PushItemWidth(160.0f);
+        ImGui::SliderFloat("Czulosc myszy", &mouseSensitivity, 0.02f, 0.4f);
         ImGui::Separator();
         ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
         ImGui::ColorEdit3("Sun color",   (float*)&sunColor);
         ImGui::SliderFloat3("Sun dir",   (float*)&sunDir, -1.0f, 1.0f);
+        ImGui::PopItemWidth();
         ImGui::End();
 
         renderScene(window);

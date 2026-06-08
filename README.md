@@ -24,7 +24,7 @@ Metody obowiązkowe:
 
 - [ ] Normal mapping *(Olejnik)*
 - [ ] Oświetlenie PBR *(Olejnik)*
-- [ ] Kamera na kwaternionach *(Mróz)*
+- [x] Kamera na kwaternionach *(Mróz)*
 - [ ] Shadow mapping *(Olejnik)*
 - [ ] Parallel Transport Frames *(Nędzyński)*
 - [ ] Podwodny skybox / cubemapa *(Nędzyński)*

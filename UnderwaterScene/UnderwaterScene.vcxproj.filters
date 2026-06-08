@@ -45,6 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\scene_underwater.hpp"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="src\QuaternionCamera.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Box.cpp"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Camera.h"><Filter>Header\Core</Filter></ClInclude>
     <ClInclude Include="src\Render_Utils.h"><Filter>Header\Core</Filter></ClInclude>
