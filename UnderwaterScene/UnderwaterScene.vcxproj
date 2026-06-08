@@ -54,6 +54,7 @@
     <None Include="shaders\skybox.vert" />
     <None Include="shaders\debug_line.frag" />
     <None Include="shaders\debug_line.vert" />
+    <None Include="shaders\fish.vert" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{7A1D9C42-3E8B-4F26-9A11-5D7C2E4B8A90}</ProjectGuid>
