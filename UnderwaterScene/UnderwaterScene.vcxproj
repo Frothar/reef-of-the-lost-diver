@@ -46,6 +46,8 @@
     <ClInclude Include="src\Texture.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\pbr.frag" />
+    <None Include="shaders\pbr.vert" />
     <None Include="shaders\underwater.frag" />
     <None Include="shaders\underwater.vert" />
     <None Include="shaders\skybox.frag" />

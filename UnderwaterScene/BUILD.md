@@ -61,7 +61,7 @@ retargetujcie lokalnie i nie commitujcie tej jednej zmiany w `.vcxproj`.
 - `Spacja` / `Lewy Ctrl` - góra / dół
 - `Lewy Shift` (przytrzymane) - szybciej
 - mysz - rozglądanie
-- `Tab` - przełącz mysz / panel ImGui
+- `Caps Lock` - przełącz mysz / panel ImGui
 - `Esc` - wyjście
 
 Ta kamera to tymczasowy placeholder, docelowo zastępuje ją kamera na kwaternionach (zadanie MRZ-02).

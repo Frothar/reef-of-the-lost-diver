@@ -3,7 +3,9 @@
 [Rr]elease/
 x64/
 Win32/
+# MSVC object files — NIE ignoruj modeli 3D w models/
 *.obj
+!models/*.obj
 *.pdb
 *.ilk
 *.idb
