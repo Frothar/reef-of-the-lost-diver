@@ -20,7 +20,7 @@
 #include <cmath>
 
 #include "imgui.h"
-#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_glfw.h"   // ImGui_ImplGlfw_*Callback – muszą być chainowane
 #include "backends/imgui_impl_opengl3.h"
 
 #include "Shader_Loader.h"
@@ -59,14 +59,22 @@ static const float skyboxVertices[] = {
 // ---------------------------------------------------------------------------
 // Shader programs / GPU resources
 // ---------------------------------------------------------------------------
+struct PBRMaterial
+{
+    glm::vec3 albedo    = glm::vec3(0.8f);
+    float     metallic  = 0.0f;
+    float     roughness = 0.5f;
+};
+
 namespace {
     Core::Shader_Loader shaderLoader;
 
-    GLuint programObject = 0;
+    GLuint programPBR    = 0;
     GLuint programSkybox = 0;
     GLuint programDebugLine = 0; // NED-01 podglad splajnu
 
     Core::RenderContext sphereContext;
+    Core::RenderContext cubeContext;
     Core::RenderContext groundContext; // re-uses the cube model, scaled flat
 
     GLuint skyboxVAO = 0, skyboxVBO = 0;
@@ -99,6 +107,11 @@ namespace {
     glm::vec3 sunColor   = glm::vec3(0.85f, 0.95f, 1.0f);
     glm::vec3 waterColor = glm::vec3(0.05f, 0.22f, 0.30f);
     float     fogDensity = 0.035f;
+
+    // OLE-01: tweakable PBR test materials (ImGui)
+    PBRMaterial sphereMaterial = { glm::vec3(0.9f, 0.5f, 0.4f), 0.0f, 0.35f };
+    PBRMaterial metalMaterial  = { glm::vec3(0.78f, 0.78f, 0.80f), 1.0f, 0.25f };
+    PBRMaterial groundMaterial = { glm::vec3(0.55f, 0.48f, 0.35f), 0.0f, 0.95f };
 }
 
 // ---------------------------------------------------------------------------
@@ -118,20 +131,27 @@ inline glm::mat4 createPerspectiveMatrix()
 // ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
-inline void drawObject(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec3 color)
+inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, const PBRMaterial& material)
 {
-    glUseProgram(programObject);
-    glm::mat4 viewProjection = createPerspectiveMatrix() * createCameraMatrix();
-    glm::mat4 transformation = viewProjection * modelMatrix;
+    glUseProgram(programPBR);
 
-    glUniformMatrix4fv(glGetUniformLocation(programObject, "transformation"), 1, GL_FALSE, (float*)&transformation);
-    glUniformMatrix4fv(glGetUniformLocation(programObject, "modelMatrix"),    1, GL_FALSE, (float*)&modelMatrix);
-    glUniform3fv(glGetUniformLocation(programObject, "cameraPos"),   1, (float*)&camera.position);
-    glUniform3fv(glGetUniformLocation(programObject, "lightDir"),    1, (float*)&sunDir);
-    glUniform3fv(glGetUniformLocation(programObject, "lightColor"),  1, (float*)&sunColor);
-    glUniform3fv(glGetUniformLocation(programObject, "objectColor"), 1, (float*)&color);
-    glUniform3fv(glGetUniformLocation(programObject, "fogColor"),    1, (float*)&waterColor);
-    glUniform1f(glGetUniformLocation(programObject, "fogDensity"), fogDensity);
+    glm::mat4 view = createCameraMatrix();
+    glm::mat4 projection = createPerspectiveMatrix();
+
+    glUniformMatrix4fv(glGetUniformLocation(programPBR, "model"),      1, GL_FALSE, (float*)&modelMatrix);
+    glUniformMatrix4fv(glGetUniformLocation(programPBR, "view"),       1, GL_FALSE, (float*)&view);
+    glUniformMatrix4fv(glGetUniformLocation(programPBR, "projection"), 1, GL_FALSE, (float*)&projection);
+
+    glUniform3fv(glGetUniformLocation(programPBR, "cameraPos"),  1, (float*)&camera.position);
+    glUniform3fv(glGetUniformLocation(programPBR, "lightDir"),   1, (float*)&sunDir);
+    glUniform3fv(glGetUniformLocation(programPBR, "lightColor"), 1, (float*)&sunColor);
+
+    glUniform3fv(glGetUniformLocation(programPBR, "albedo"), 1, (float*)&material.albedo);
+    glUniform1f(glGetUniformLocation(programPBR, "metallic"),  material.metallic);
+    glUniform1f(glGetUniformLocation(programPBR, "roughness"), material.roughness);
+
+    glUniform3fv(glGetUniformLocation(programPBR, "fogColor"),  1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programPBR, "fogDensity"), fogDensity);
 
     Core::DrawContext(context);
     glUseProgram(0);
@@ -226,15 +246,24 @@ inline void renderScene(GLFWwindow* window)
 
     float time = (float)glfwGetTime();
 
-    // Sandy seabed (flat scaled cube)
-    drawObject(groundContext,
+    // Sandy seabed (flat scaled cube, matte dielectric)
+    drawPBRObject(groundContext,
         glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(40.0f, 0.2f, 40.0f)),
-        glm::vec3(0.55f, 0.48f, 0.35f));
+        groundMaterial);
 
-    // A slowly bobbing test sphere
-    drawObject(sphereContext,
-        glm::translate(glm::vec3(0.0f, 0.3f * std::sin(time), 0.0f)) * glm::scale(glm::vec3(1.0f)),
-        glm::vec3(0.9f, 0.5f, 0.4f));
+    // Dielectric test sphere (~2 m, metallic=0, roughness tweakable in ImGui)
+    drawPBRObject(sphereContext,
+        glm::translate(glm::vec3(-1.5f, 1.0f + 0.15f * std::sin(time), 0.0f)) *
+            glm::scale(glm::vec3(1.0f)),
+        sphereMaterial);
+
+    // Metallic test cube – models/cube.obj ma 20 jednostek boku; skalujemy do ~2 m
+    const float metalCubeScale = 0.1f;
+    drawPBRObject(cubeContext,
+        glm::translate(glm::vec3(2.0f, 1.0f + 0.1f * std::sin(time * 0.7f), 0.0f)) *
+            glm::rotate((float)time * 0.4f, glm::vec3(0.0f, 1.0f, 0.0f)) *
+            glm::scale(glm::vec3(metalCubeScale)),
+        metalMaterial);
 
     // Splajn (NED-01) - podglad sciezki dla ryb
     drawSpline();
@@ -249,16 +278,18 @@ inline void renderScene(GLFWwindow* window)
 // ---------------------------------------------------------------------------
 // Model loading
 // ---------------------------------------------------------------------------
-inline void loadModelToContext(std::string path, Core::RenderContext& context)
+inline bool loadModelToContext(const std::string& path, Core::RenderContext& context)
 {
     Assimp::Importer import;
     const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_CalcTangentSpace);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
     {
-        std::cout << "ERROR::ASSIMP::" << import.GetErrorString() << std::endl;
-        return;
+        std::cout << "ERROR::ASSIMP::" << path << " -> " << import.GetErrorString() << std::endl;
+        return false;
     }
     context.initFromAssimpMesh(scene->mMeshes[0]);
+    std::cout << "Loaded model: " << path << " (" << context.size / 3 << " tris)" << std::endl;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -272,25 +303,41 @@ inline void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 inline void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    if (!mouseLook) { firstMouse = true; return; }
+    // init() nadpisuje callbacki GLFW – bez tego ImGui nie dostaje pozycji myszy i suwaki nie działają.
+    ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+
+    // Gdy kursor nad panelem ImGui, nie obracaj kamery (WantCaptureMouse = poprzednia klatka).
+    if (!mouseLook || ImGui::GetIO().WantCaptureMouse)
+    {
+        firstMouse = true;
+        return;
+    }
+
     if (firstMouse) { lastX = (float)xpos; lastY = (float)ypos; firstMouse = false; }
 
     float dx = ((float)xpos - lastX) * mouseSensitivity; // prawo dodatnie
     float dy = (lastY - (float)ypos) * mouseSensitivity; // gora dodatnia
     lastX = (float)xpos; lastY = (float)ypos;
 
-    // yaw w prawo gdy mysz w prawo, pitch w gore gdy mysz w gore
     camera.addYawPitch(-dx, dy);
 }
 
 inline void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    // Tab toggles mouse-look so you can interact with the ImGui panel.
-    if (key == GLFW_KEY_TAB && action == GLFW_PRESS)
-    {
+    ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+
+    // Caps Lock: ręczne przełączenie trybu rozglądania (opcjonalne – panel działa też bez tego).
+    if (key == GLFW_KEY_CAPS_LOCK && action == GLFW_PRESS)
         mouseLook = !mouseLook;
-        glfwSetInputMode(window, GLFW_CURSOR, mouseLook ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-    }
+}
+
+inline void updateCursorMode(GLFWwindow* window)
+{
+    // Nad panelem ImGui pokaż kursor; w widoku 3D schowaj go do rozglądania.
+    if (ImGui::GetIO().WantCaptureMouse || !mouseLook)
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    else
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
 inline void processInput(GLFWwindow* window)
@@ -330,15 +377,19 @@ inline void init(GLFWwindow* window)
 
     glEnable(GL_DEPTH_TEST);
 
-    programObject = shaderLoader.CreateProgram(
-        (char*)"shaders/underwater.vert", (char*)"shaders/underwater.frag");
+    programPBR = shaderLoader.CreateProgram(
+        (char*)"shaders/pbr.vert", (char*)"shaders/pbr.frag");
     programSkybox = shaderLoader.CreateProgram(
         (char*)"shaders/skybox.vert", (char*)"shaders/skybox.frag");
     programDebugLine = shaderLoader.CreateProgram(
         (char*)"shaders/debug_line.vert", (char*)"shaders/debug_line.frag");
 
-    loadModelToContext("./models/sphere.obj", sphereContext);
-    loadModelToContext("./models/cube.obj",   groundContext);
+    if (!loadModelToContext("./models/sphere.obj", sphereContext))
+        std::cout << "Brak models/sphere.obj – dodaj model kuli do folderu models/" << std::endl;
+    if (!loadModelToContext("./models/cube.obj", cubeContext))
+        std::cout << "Brak models/cube.obj – metal cube nie bedzie widoczny" << std::endl;
+    if (!loadModelToContext("./models/cube.obj", groundContext))
+        std::cout << "Brak models/cube.obj – dno nie bedzie widoczne" << std::endl;
 
     // Skybox VAO
     glGenVertexArrays(1, &skyboxVAO);
@@ -432,7 +483,7 @@ inline void init(GLFWwindow* window)
 
 inline void shutdown(GLFWwindow* window)
 {
-    shaderLoader.DeleteProgram(programObject);
+    shaderLoader.DeleteProgram(programPBR);
     shaderLoader.DeleteProgram(programSkybox);
     shaderLoader.DeleteProgram(programDebugLine);
     glDeleteVertexArrays(1, &splineVAO);
@@ -460,7 +511,9 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("WSAD ruch, Q/E przechyl, Spacja/Ctrl gora-dol");
-        ImGui::Text("TAB: mysz <-> panel");
+        ImGui::Text("Suwaki: najedz myszka na panel (Caps Lock = lock kamery)");
+        if (ImGui::GetIO().WantCaptureMouse)
+            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "Panel aktywny - suwaki dzialaja");
         ImGui::Separator();
         ImGui::Text("Kamera: %6.1f %6.1f %6.1f", camera.position.x, camera.position.y, camera.position.z);
         ImGui::PushItemWidth(160.0f);
@@ -473,8 +526,18 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
         ImGui::ColorEdit3("Sun color",   (float*)&sunColor);
         ImGui::SliderFloat3("Sun dir",   (float*)&sunDir, -1.0f, 1.0f);
+        ImGui::Separator();
+        ImGui::Text("OLE-01 PBR test (sphere)");
+        ImGui::ColorEdit3("Albedo", (float*)&sphereMaterial.albedo);
+        ImGui::SliderFloat("Metallic",  &sphereMaterial.metallic,  0.0f, 1.0f);
+        ImGui::SliderFloat("Roughness", &sphereMaterial.roughness, 0.0f, 1.0f);
+        ImGui::Text("Metal cube (po prawej od kuli): roughness %.2f", metalMaterial.roughness);
+        ImGui::SliderFloat("Metal roughness", &metalMaterial.roughness, 0.0f, 1.0f);
+        ImGui::TextDisabled("Material metalowy = kod PBR, nie osobny model");
         ImGui::PopItemWidth();
         ImGui::End();
+
+        updateCursorMode(window);
 
         renderScene(window);
 

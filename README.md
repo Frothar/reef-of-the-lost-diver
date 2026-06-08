@@ -23,7 +23,7 @@ Metody dopiero robimy. Statusy odhaczamy w trakcie, szczegóły zadań są w [TA
 Metody obowiązkowe:
 
 - [ ] Normal mapping *(Olejnik)*
-- [ ] Oświetlenie PBR *(Olejnik)*
+- [x] Oświetlenie PBR *(Olejnik)* — bazowy Cook-Torrance (OLE-01)
 - [x] Kamera na kwaternionach *(Mróz)*
 - [ ] Shadow mapping *(Olejnik)*
 - [ ] Parallel Transport Frames *(Nędzyński)*
@@ -65,7 +65,7 @@ Docelowo (jak już będą gotowe wszystkie metody):
 - `B` - bioluminescencja on/off
 
 W obecnym szkielecie działa na razie tyle: `WSAD` + mysz do pływania, `Spacja`/`Lewy Ctrl`
-góra-dół, `Lewy Shift` przyspieszenie, `Tab` przełącza panel ImGui, `Esc` wyjście.
+góra-dół, `Lewy Shift` przyspieszenie, `Caps Lock` przełącza panel ImGui, `Esc` wyjście.
 
 ## Struktura projektu
 
