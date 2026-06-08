@@ -31,6 +31,7 @@
     <ClCompile Include="src\Camera.cpp"><Filter>Source\Core</Filter></ClCompile>
     <ClCompile Include="src\Render_Utils.cpp"><Filter>Source\Core</Filter></ClCompile>
     <ClCompile Include="src\Shader_Loader.cpp"><Filter>Source\Core</Filter></ClCompile>
+    <ClCompile Include="src\Spline.cpp"><Filter>Source</Filter></ClCompile>
     <ClCompile Include="src\Texture.cpp"><Filter>Source\Core</Filter></ClCompile>
     <ClCompile Include="src\SOIL\image_DXT.c"><Filter>Source\SOIL</Filter></ClCompile>
     <ClCompile Include="src\SOIL\image_helper.c"><Filter>Source\SOIL</Filter></ClCompile>
@@ -46,6 +47,7 @@
   <ItemGroup>
     <ClInclude Include="src\scene_underwater.hpp"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\QuaternionCamera.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="src\Spline.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Box.cpp"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Camera.h"><Filter>Header\Core</Filter></ClInclude>
     <ClInclude Include="src\Render_Utils.h"><Filter>Header\Core</Filter></ClInclude>
@@ -64,5 +66,7 @@
     <None Include="shaders\underwater.frag"><Filter>Shaders</Filter></None>
     <None Include="shaders\skybox.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\skybox.frag"><Filter>Shaders</Filter></None>
+    <None Include="shaders\debug_line.vert"><Filter>Shaders</Filter></None>
+    <None Include="shaders\debug_line.frag"><Filter>Shaders</Filter></None>
   </ItemGroup>
 </Project>

@@ -131,11 +131,11 @@ Ryby (A10) + PTF + skybox + meduzy. ~31h.
 
 Klasa splajnu Catmull-Rom do gładkich ścieżek w 3D.
 
-- [ ] `src/Spline.h` / `.cpp`
-- [ ] `addControlPoint(glm::vec3)`, `evaluate(float t)`, `evaluateTangent(float t)`
-- [ ] interpolacja Catmull-Rom między punktami
-- [ ] ścieżki zapętlone (ostatni punkt łączy się z pierwszym)
-- [ ] test: render splajnu jako linii, żeby sprawdzić gładkość
+- [x] `src/Spline.h` / `.cpp`
+- [x] `addControlPoint(glm::vec3)`, `evaluate(float t)`, `evaluateTangent(float t)`
+- [x] interpolacja Catmull-Rom między punktami
+- [x] ścieżki zapętlone (ostatni punkt łączy się z pierwszym)
+- [x] test: render splajnu jako linii, żeby sprawdzić gładkość
 
 Gotowe gdy: ścieżka z 5+ punktami daje gładką, ciągłą krzywą, `evaluate(0)` = pierwszy punkt,
 tangenty gładkie i niezerowe.

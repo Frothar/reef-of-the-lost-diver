@@ -28,6 +28,9 @@
 #include "Texture.h"
 #include "Camera.h"               // Core::createPerspectiveMatrix
 #include "QuaternionCamera.h"     // MRZ-02 quaternion camera
+#include "Spline.h"               // NED-01 splajn Catmull-Rom
+
+#include <vector>
 
 #include "Box.cpp"
 #include <assimp/Importer.hpp>
@@ -61,12 +64,19 @@ namespace {
 
     GLuint programObject = 0;
     GLuint programSkybox = 0;
+    GLuint programDebugLine = 0; // NED-01 podglad splajnu
 
     Core::RenderContext sphereContext;
     Core::RenderContext groundContext; // re-uses the cube model, scaled flat
 
     GLuint skyboxVAO = 0, skyboxVBO = 0;
     GLuint skyboxCubemap = 0;
+
+    // --- Splajn (NED-01) -----------------------------------------------------
+    Spline debugSpline;
+    GLuint splineVAO = 0, splineVBO = 0;
+    int    splineVertexCount = 0;
+    bool   showSpline = true;
 
     float aspectRatio = 1.0f;
 
@@ -121,6 +131,24 @@ inline void drawObject(Core::RenderContext& context, glm::mat4 modelMatrix, glm:
     glUseProgram(0);
 }
 
+// Podglad splajnu jako linia (NED-01) - sluzy do wizualnej kontroli gladkosci.
+inline void drawSpline()
+{
+    if (!showSpline || splineVertexCount < 2) return;
+
+    glUseProgram(programDebugLine);
+    glm::mat4 viewProjection = createPerspectiveMatrix() * createCameraMatrix();
+    glm::vec3 lineColor = glm::vec3(1.0f, 0.85f, 0.2f); // zolta linia, dobrze widoczna pod woda
+
+    glUniformMatrix4fv(glGetUniformLocation(programDebugLine, "viewProjection"), 1, GL_FALSE, (float*)&viewProjection);
+    glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&lineColor);
+
+    glBindVertexArray(splineVAO);
+    glDrawArrays(GL_LINE_STRIP, 0, splineVertexCount);
+    glBindVertexArray(0);
+    glUseProgram(0);
+}
+
 inline void drawSkybox()
 {
     glDepthFunc(GL_LEQUAL);
@@ -160,6 +188,9 @@ inline void renderScene(GLFWwindow* window)
     drawObject(sphereContext,
         glm::translate(glm::vec3(0.0f, 0.3f * std::sin(time), 0.0f)) * glm::scale(glm::vec3(1.0f)),
         glm::vec3(0.9f, 0.5f, 0.4f));
+
+    // Splajn (NED-01) - podglad sciezki dla ryb
+    drawSpline();
 
     // Skybox last (depth trick keeps it behind everything)
     drawSkybox();
@@ -253,6 +284,8 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/underwater.vert", (char*)"shaders/underwater.frag");
     programSkybox = shaderLoader.CreateProgram(
         (char*)"shaders/skybox.vert", (char*)"shaders/skybox.frag");
+    programDebugLine = shaderLoader.CreateProgram(
+        (char*)"shaders/debug_line.vert", (char*)"shaders/debug_line.frag");
 
     loadModelToContext("./models/sphere.obj", sphereContext);
     loadModelToContext("./models/cube.obj",   groundContext);
@@ -275,6 +308,34 @@ inline void init(GLFWwindow* window)
     };
     skyboxCubemap = Core::LoadCubemap(faces);
 
+    // --- Splajn (NED-01): zapetlona sciezka testowa nad dnem ----------------
+    debugSpline.addControlPoint(glm::vec3( 6.0f, 1.0f,  0.0f));
+    debugSpline.addControlPoint(glm::vec3( 3.0f, 2.5f,  5.0f));
+    debugSpline.addControlPoint(glm::vec3(-3.0f, 3.0f,  4.0f));
+    debugSpline.addControlPoint(glm::vec3(-6.0f, 1.0f, -1.0f));
+    debugSpline.addControlPoint(glm::vec3(-2.0f, 0.0f, -5.0f));
+    debugSpline.addControlPoint(glm::vec3( 4.0f, 2.0f, -4.0f));
+
+    std::vector<glm::vec3> splinePts = debugSpline.sampleLine(32);
+    splineVertexCount = (int)splinePts.size();
+
+    glGenVertexArrays(1, &splineVAO);
+    glGenBuffers(1, &splineVBO);
+    glBindVertexArray(splineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, splineVBO);
+    glBufferData(GL_ARRAY_BUFFER, splinePts.size() * sizeof(glm::vec3), splinePts.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glBindVertexArray(0);
+
+    // Szybki test poprawnosci w konsoli (NED-01 "done when").
+    glm::vec3 p0 = debugSpline.evaluate(0.0f);
+    glm::vec3 first = debugSpline.points()[0];
+    std::cout << "[NED-01] evaluate(0) = (" << p0.x << ", " << p0.y << ", " << p0.z
+              << "), pierwszy punkt = (" << first.x << ", " << first.y << ", " << first.z << ")\n";
+    std::cout << "[NED-01] |tangent(0.0)| = " << glm::length(debugSpline.evaluateTangent(0.0f))
+              << ", |tangent(0.5)| = " << glm::length(debugSpline.evaluateTangent(0.5f)) << "\n";
+
     int w, h; glfwGetFramebufferSize(window, &w, &h);
     framebuffer_size_callback(window, w, h);
 }
@@ -283,6 +344,9 @@ inline void shutdown(GLFWwindow* window)
 {
     shaderLoader.DeleteProgram(programObject);
     shaderLoader.DeleteProgram(programSkybox);
+    shaderLoader.DeleteProgram(programDebugLine);
+    glDeleteVertexArrays(1, &splineVAO);
+    glDeleteBuffers(1, &splineVBO);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -309,6 +373,8 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::Text("Kamera: %6.1f %6.1f %6.1f", camera.position.x, camera.position.y, camera.position.z);
         ImGui::PushItemWidth(160.0f);
         ImGui::SliderFloat("Czulosc myszy", &mouseSensitivity, 0.02f, 0.4f);
+        ImGui::Separator();
+        ImGui::Checkbox("Pokaz splajn (NED-01)", &showSpline);
         ImGui::Separator();
         ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
