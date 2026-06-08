@@ -21,6 +21,7 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Render_Utils.cpp" />
     <ClCompile Include="src\Shader_Loader.cpp" />
+    <ClCompile Include="src\Spline.cpp" />
     <ClCompile Include="src\SOIL\image_DXT.c" />
     <ClCompile Include="src\SOIL\image_helper.c" />
     <ClCompile Include="src\SOIL\SOIL.c" />
@@ -35,6 +36,7 @@
     <ClInclude Include="src\Render_Utils.h" />
     <ClInclude Include="src\scene_underwater.hpp" />
     <ClInclude Include="src\Shader_Loader.h" />
+    <ClInclude Include="src\Spline.h" />
     <ClInclude Include="src\SOIL\image_DXT.h" />
     <ClInclude Include="src\SOIL\image_helper.h" />
     <ClInclude Include="src\SOIL\SOIL.h" />
@@ -48,6 +50,8 @@
     <None Include="shaders\underwater.vert" />
     <None Include="shaders\skybox.frag" />
     <None Include="shaders\skybox.vert" />
+    <None Include="shaders\debug_line.frag" />
+    <None Include="shaders\debug_line.vert" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{7A1D9C42-3E8B-4F26-9A11-5D7C2E4B8A90}</ProjectGuid>
