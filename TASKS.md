@@ -25,11 +25,11 @@ Ogarnia PBR + normal mapping + cienie + obsługę wielu świateł. ~30h.
 
 Bazowy fragment shader z Cook-Torrance BRDF (na sztywnych materiałach, jedno światło kierunkowe).
 
-- [ ] `shaders/pbr.vert` - pozycja, normalna, texCoords do world space, macierz TBN
-- [ ] `shaders/pbr.frag` - Cook-Torrance z GGX (D), Schlick (F), Smith (G)
-- [ ] jedno światło kierunkowe (słońce przez wodę)
-- [ ] tone mapping (Reinhard albo ACES) + korekcja gamma
-- [ ] test na sztywnych wartościach albedo/metallic/roughness na prostym meshu
+- [x] `shaders/pbr.vert` - pozycja, normalna, texCoords do world space, macierz TBN
+- [x] `shaders/pbr.frag` - Cook-Torrance z GGX (D), Schlick (F), Smith (G)
+- [x] jedno światło kierunkowe (słońce przez wodę)
+- [x] tone mapping (Reinhard albo ACES) + korekcja gamma
+- [x] test na sztywnych wartościach albedo/metallic/roughness na prostym meshu
 
 Jak wiemy, że gotowe: kula/kostka renderuje się z poprawnym PBR (highlight zmienia się z roughness),
 metallic=0 wygląda jak plastik/kamień, metallic=1 jak metal.

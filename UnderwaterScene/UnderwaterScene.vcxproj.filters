@@ -62,6 +62,8 @@
     <ClInclude Include="src\SOIL\stb_image_aug.h"><Filter>Header\SOIL</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\pbr.vert"><Filter>Shaders</Filter></None>
+    <None Include="shaders\pbr.frag"><Filter>Shaders</Filter></None>
     <None Include="shaders\underwater.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\underwater.frag"><Filter>Shaders</Filter></None>
     <None Include="shaders\skybox.vert"><Filter>Shaders</Filter></None>
