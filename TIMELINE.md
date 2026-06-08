@@ -119,7 +119,7 @@ MRZ-01 (Setup) → OLE-01 (PBR basic) → OLE-02 (PBR textures) → OLE-03 (Norm
 
 | Who | Task | Why first |
 |-----|------|-----------|
-| **Mróz** | `MRZ-01` Project setup, CMake, window | 🚨 **EVERYTHING depends on this** — Olejnik and Nędzyński can't test their code without a running window |
+| **Mróz** | `MRZ-01` Project setup (VS), window — ✅ **DONE** | 🚨 **EVERYTHING depends on this** — Olejnik and Nędzyński can't test their code without a running window |
 | **Nędzyński** | `NED-01` Spline path system | No dependencies — can work standalone with unit tests or a separate test app |
 | **Olejnik** | `ALL-01` + `ALL-02` Find models & textures | Can't code shaders without test models; search Sketchfab/ambientCG now |
 | **ALL** | `ALL-01` Help find models | Everyone browse for 30 min, share links |
@@ -238,7 +238,7 @@ MRZ-08 Finalize README (Mróz)
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| `MRZ-01` setup takes too long | 🔴 Blocks entire team | Reuse the course lab framework's libraries and helpers (GLEW, SOIL, Core/Render_Utils, Shader_Loader) — just port the build to CMake, don't rewrite the rendering basics from scratch |
+| `MRZ-01` setup takes too long | 🔴 Blocks entire team | ✅ Already done — reused the course framework's libraries and helpers (GLEW, SOIL, Core/Render_Utils, Shader_Loader) in a ready-to-build Visual Studio project, no rewrite of the rendering basics |
 | Fish model has no clean UVs | 🟠 Blocks `NED-03` | Use a simple low-poly fish from Sketchfab; test with a textured cube first |
 | Shadow mapping has bad artifacts | 🟡 Visual quality | Start with large bias values; PCF hides most issues; `OLE-07` is dedicated to this |
 | Skeletal animation too complex | 🟠 Blocks A10 | **Use vertex-shader deformation** (Option A) — it's simpler and fully sufficient for grading |

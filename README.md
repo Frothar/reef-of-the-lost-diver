@@ -27,24 +27,28 @@ An interactive real-time 3D underwater scene built with **C++**, **OpenGL**, and
 
 ---
 
-## ✅ Implemented Methods
+## 📋 Methods & Progress
+
+> Status of the required and chosen methods — update the checkboxes as you implement them.
+> So far only the project environment (`MRZ-01`) is done; the methods below are the plan.
+> Full task breakdown in [`TASKS.md`](TASKS.md).
 
 ### Mandatory Methods
 
-| Method | Description |
-|--------|-------------|
-| **Normal mapping** | Tangent-space normal maps applied to seabed, shipwreck hull, and coral surfaces using TBN matrices for per-fragment detail |
-| **PBR lighting** | Cook-Torrance BRDF with metallic/roughness workflow, GGX distribution, Schlick Fresnel, and Smith geometry function |
-| **Quaternion camera control** | Gimbal-lock-free camera with quaternion-based rotation, 6DOF underwater swimming movement |
-| **Shadow mapping** | Directional light shadow map with depth FBO (2048×2048), slope-scaled bias, and 3×3 PCF soft shadows |
-| **Parallel Transport Frames** | Stable orientation frames along Catmull-Rom splines for twist-free fish path following |
-| **Underwater skybox/cubemap** | 6-face cubemap with deep blue-green underwater atmosphere, rendered position-independently |
+| Status | Method | Owner | Description |
+|--------|--------|-------|-------------|
+| `[ ]` | **Normal mapping** | Olejnik | Tangent-space normal maps applied to seabed, shipwreck hull, and coral surfaces using TBN matrices for per-fragment detail |
+| `[ ]` | **PBR lighting** | Olejnik | Cook-Torrance BRDF with metallic/roughness workflow, GGX distribution, Schlick Fresnel, and Smith geometry function |
+| `[ ]` | **Quaternion camera control** | Mróz | Gimbal-lock-free camera with quaternion-based rotation, 6DOF underwater swimming movement |
+| `[ ]` | **Shadow mapping** | Olejnik | Directional light shadow map with depth FBO (2048×2048), slope-scaled bias, and 3×3 PCF soft shadows |
+| `[ ]` | **Parallel Transport Frames** | Nędzyński | Stable orientation frames along Catmull-Rom splines for twist-free fish path following |
+| `[ ]` | **Underwater skybox/cubemap** | Nędzyński | 6-face cubemap with deep blue-green underwater atmosphere, rendered position-independently |
 
-### Chosen Method A10 — Swimming Animation
+### `[ ]` Chosen Method A10 — Swimming Animation *(Nędzyński)*
 
 Vertex-shader body undulation for fish and sea creatures. Sine-wave displacement increases from head to tail, with separate fin animation. Parameters (amplitude, frequency, speed) are controllable per species.
 
-### Chosen Method B13 — Moving Lights
+### `[ ]` Chosen Method B13 — Moving Lights *(Mróz)*
 
 - **Diver headlamp** — user-controlled spotlight with toggleable on/off state, color cycling, and adjustable intensity
 - **Bioluminescent organisms** — animated point lights with pulsing intensity and slow drift movement (soft blue, green, purple glow)
@@ -55,48 +59,43 @@ Vertex-shader body undulation for fish and sea creatures. Sine-wave displacement
 
 ### Prerequisites
 
-- C++17 compatible compiler (Clang, GCC, or MSVC)
-- CMake 3.16+
-- OpenGL 4.1+
-- The following libraries (included in `lib/` or fetched via CMake):
+- **Visual Studio 2022 or 2026** (Community is fine) with the **"Desktop development with C++"** workload
+- An **OpenGL 4.1+** capable GPU (any modern GPU)
+- Libraries used (already provided — see the note below):
   - [GLFW](https://www.glfw.org/) — windowing and input
-  - [GLEW](http://glew.sourceforge.net/) — OpenGL extension loader (matches the course lab framework, `glew.h`/`glew32.dll`)
-  - [GLM](https://github.com/g-truc/glm) — mathematics
+  - [GLEW](http://glew.sourceforge.net/) — OpenGL extension loader (`glew.h` / `glew32.dll`)
+  - [GLM](https://github.com/g-truc/glm) — mathematics (header-only, committed to the repo)
   - [Assimp](https://github.com/assimp/assimp) — model loading
-  - [SOIL](https://github.com/littlewhite-tb/soil2) — texture loading (matches the course lab framework's `Texture.cpp`)
+  - [SOIL](https://github.com/littlewhite-tb/soil2) — texture loading
 
-> **Note:** We build on top of the GRK course lab framework (`grk-cw.sln`, see `Grafika komputerowa - projekt z zajęć/`), which already provides `Shader_Loader` and the `Core`/`Render_Utils` helpers (`initVAO`, `loadModelToContext`, `LoadTexture`, `SetActiveTexture`, etc.) built on **GLEW + SOIL**, not GLAD/stb_image. We extend this base with our own `Model`/`Mesh`/`Texture` classes and migrate the build from the provided Visual Studio solution to CMake for cross-platform development — a deliberate departure from "use the framework as-is," not an oversight.
+> **Note:** We build on top of the GRK course lab framework (see `Grafika komputerowa - projekt z zajęć/`, exercise `cw 7`), which provides `Shader_Loader` and the `Core`/`Render_Utils` helpers (`loadModelToContext`, `LoadTexture`, `LoadCubemap`, `SetActiveTexture`, etc.) built on **GLEW + SOIL**, not GLAD/stb_image. We extend this base with our own modules and ship it as a self-contained Visual Studio project under `UnderwaterScene/`. Shaders are `#version 410 core` (OpenGL 4.1).
 
 ### Build Instructions
 
-```bash
-# Clone the repository
-git clone https://github.com/<your-repo-url>.git
-cd Projekt_grafika_komputerowa
+The whole team builds in **Visual Studio on Windows**. The full step-by-step — including
+restoring the prebuilt libraries and the toolset-retarget note — is in
+**[`UnderwaterScene/BUILD.md`](UnderwaterScene/BUILD.md)**. In short:
 
-# Create build directory
-mkdir build && cd build
+1. Clone the repo:
+   ```bash
+   git clone https://github.com/Frothar/reef-of-the-lost-diver.git
+   ```
+2. Restore `UnderwaterScene/dependencies/` from the course framework's
+   `cw 7/dependencies` — the heavy Windows libraries are git-ignored, while `glm` and
+   `imgui` are already in the repo.
+3. Open **`UnderwaterScene/UnderwaterScene.sln`**, select **`Debug | x86`**, press **F5**.
 
-# Configure and build
-cmake ..
-make -j$(nproc)    # Linux/macOS
-# or
-cmake --build . --config Release   # Cross-platform
-
-# Run the application
-./UnderwaterScene
-```
-
-### macOS Notes
-
-On macOS, OpenGL is deprecated but still functional. You may need to set:
-```bash
-export MACOSX_DEPLOYMENT_TARGET=10.15
-```
+> Using Visual Studio 2022 and hit *"v145 build tools not found"*? Right-click the project →
+> **Retarget Projects** → pick **v143**. See `BUILD.md` §3.
 
 ---
 
 ## 🎮 Controls
+
+> ℹ️ **These are the target controls for the finished product.** The current starter scene
+> uses a free-fly camera: `W A S D` to swim, `Space`/`Left Ctrl` up/down, `Left Shift` to
+> boost, mouse to look, `Tab` to toggle the ImGui panel, `Esc` to quit. The interactions
+> below (headlamp, scaring fish, bioluminescence) are added with tasks `MRZ-05`/`MRZ-06`.
 
 ### Camera Movement
 
@@ -143,35 +142,28 @@ export MACOSX_DEPLOYMENT_TARGET=10.15
 ## 📁 Project Structure
 
 ```
-Projekt_grafika_komputerowa/
-├── README.md
-├── CMakeLists.txt
-├── src/
-│   ├── main.cpp                    # Entry point, main loop
-│   ├── Camera.h / Camera.cpp       # Quaternion camera
-│   ├── Shader.h / Shader.cpp       # Shader loading & uniforms
-│   ├── Model.h / Model.cpp         # Model loading (Assimp)
-│   ├── Mesh.h / Mesh.cpp           # Mesh data (VAO, VBO, EBO)
-│   ├── Texture.h / Texture.cpp     # Texture & cubemap loading
-│   ├── Light.h / Light.cpp         # Light management
-│   ├── ShadowMap.h / ShadowMap.cpp # Shadow FBO & rendering
-│   ├── Skybox.h / Skybox.cpp       # Cubemap skybox
-│   ├── Spline.h / Spline.cpp       # Catmull-Rom splines + PTF
-│   ├── FishAnimation.h / .cpp      # Swimming animation
-│   ├── ParticleSystem.h / .cpp     # Bubble particles
-│   └── Scene.h / Scene.cpp         # Scene graph & objects
-├── shaders/
-│   ├── pbr.vert / pbr.frag         # PBR + normal mapping
-│   ├── shadow_depth.vert / .frag   # Shadow pass
-│   ├── skybox.vert / skybox.frag   # Skybox rendering
-│   ├── fish.vert / fish.frag       # Fish swimming animation
-│   └── particle.vert / .frag       # Bubble particles
-├── models/                          # 3D models (.obj, .fbx, .gltf)
-├── textures/                        # Albedo, normal, metallic, roughness, AO
-│   └── skybox/                      # 6 cubemap faces
-├── screenshots/                     # Screenshots for README
-└── lib/                             # External dependencies
+Projekt - Grafika/
+├── README.md  TASKS.md  TIMELINE.md      # planning docs
+└── UnderwaterScene/                      # the Visual Studio project
+    ├── UnderwaterScene.sln / .vcxproj    # VS solution (Win32, toolset v145)
+    ├── CMakeLists.txt                    # optional macOS/Linux build (untested)
+    ├── BUILD.md                          # build instructions
+    ├── src/
+    │   ├── main.cpp                      # entry point, window + GL context init
+    │   ├── scene_underwater.hpp          # starter scene: camera, skybox, draw loop
+    │   ├── Shader_Loader.{h,cpp}         # Core: shader loading & linking
+    │   ├── Render_Utils.{h,cpp}          # Core: RenderContext, Assimp mesh loading
+    │   ├── Texture.{h,cpp}               # Core: textures + cubemap (SOIL)
+    │   ├── Camera.{h,cpp}                # Core: view / projection helpers
+    │   └── SOIL/                         # image loading
+    ├── shaders/                          # underwater.vert/frag, skybox.vert/frag (#version 410)
+    ├── models/   textures/  (+ skybox/)  screenshots/
+    └── dependencies/                     # glm, imgui (committed) + glew/glfw/assimp (restored locally)
 ```
+
+> **Planned modules** (added during the project — see [`TASKS.md`](TASKS.md)):
+> `Model`/`Mesh`, `Light`, `ShadowMap`, `Skybox`, `Spline` (+ PTF), `FishAnimation`,
+> `ParticleSystem`, `Scene`, plus the `pbr`, `shadow_depth`, `fish` and `particle` shaders.
 
 ---
 

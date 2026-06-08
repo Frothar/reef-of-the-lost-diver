@@ -374,25 +374,26 @@ Create visual variety with different animation parameters.
 
 ---
 
-### `MRZ-01` 🔴 P0 · Project Setup & Window Init (~4h)
+### `MRZ-01` ✅ P0 · Project Setup & Window Init (~4h) — **DONE**
 **Week 1**
 
-Set up the project from the course lab framework (`grk-cw.sln`, GLEW + SOIL + Core/Render_Utils/Shader_Loader), porting the build to CMake and pulling in the remaining dependencies.
+Set up the project from the course lab framework (`cw 7`: GLEW + SOIL + Core/Render_Utils/Shader_Loader/Texture/Camera) as a self-contained **Visual Studio** project under `UnderwaterScene/`, with the dependencies bundled.
 
-**What to do:**
-- [ ] Create `CMakeLists.txt` with targets and dependency management
-- [ ] Set up GLFW, GLEW, GLM, Assimp, SOIL (either in `lib/` or via package manager) — matching the libraries already used by the course framework
-- [ ] Create `src/main.cpp` — GLFW window creation, OpenGL context, main loop skeleton
-- [ ] Create `src/Shader.h` / `src/Shader.cpp` — load, compile, link shaders; set uniforms
-- [ ] Create `.gitignore` (build dirs, IDE files, OS files)
-- [ ] Verify it compiles and opens a blank window on all team members' machines
+**What was done:**
+- [x] Visual Studio solution `UnderwaterScene.sln` / `.vcxproj` (Win32, toolset v145) with GLFW, GLEW, GLM, Assimp, SOIL, ImGui wired up
+- [x] `src/main.cpp` — GLFW window, **OpenGL 4.1 core** context, GLEW init, main loop
+- [x] `src/scene_underwater.hpp` — starter scene (free-fly camera, skybox, draw loop)
+- [x] Shader loading via the Core `Shader_Loader` (no separate `Shader.h` needed)
+- [x] `.gitignore` + `.gitattributes` (build dirs, heavy deps, line-ending normalization)
+- [x] `CMakeLists.txt` for macOS/Linux (optional, untested — team is on Windows/VS)
+- [x] Builds and runs (verified): window opens, console prints `OpenGL 4.1.0`
 
 **Acceptance criteria:**
-- `cmake .. && make` (or equivalent) produces a running executable
-- Window opens with a cleared color (dark blue for underwater)
-- Shader loading utility works (test with a simple pass-through shader)
+- [x] Building in Visual Studio (`Debug | x86`, F5) produces a running executable
+- [x] Window opens with a cleared underwater color
+- [x] Shader loading utility works (`underwater` + `skybox` programs compile and render)
 
-**Dependencies:** None — **start here first!**
+**Dependencies:** None — **done first.** Everyone else builds on top of this. See `UnderwaterScene/BUILD.md`.
 
 ---
 
