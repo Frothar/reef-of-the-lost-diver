@@ -164,13 +164,13 @@ Materiały: [Parallel Transport (giordi91)](https://giordi91.github.io/post/2018
 
 Falowanie ciała ryby przez sinusoidę w vertex shaderze.
 
-- [ ] `shaders/fish.vert` - bazuje na vertex shaderze PBR + deformacja
-- [ ] `shaders/fish.frag` - jak `pbr.frag` (albo wspólny kod oświetlenia)
-- [ ] fala ciała: `deformed.x += sin(z * freq - time * speed) * amplitude * bodyFactor`
-- [ ] `bodyFactor = smoothstep(0, 1, z / fishLength)` - fala rośnie ku ogonowi
-- [ ] animacja płetw: osobna sinusoida
-- [ ] uniformy: `time`, `waveAmplitude`, `waveFrequency`, `waveSpeed`, `fishLength`
-- [ ] przeliczenie normalnych po deformacji (różnice skończone albo analitycznie)
+- [x] `shaders/fish.vert` - bazuje na vertex shaderze PBR + deformacja
+- [x] `shaders/fish.frag` - jak `pbr.frag` (wspólny kod oświetlenia: fish.vert + pbr.frag)
+- [x] fala ciała: `deformed.x += sin(z * freq - time * speed) * amplitude * bodyFactor`
+- [x] `bodyFactor = smoothstep(0, 1, z / fishLength)` - fala rośnie ku ogonowi
+- [x] animacja płetw: osobna sinusoida
+- [x] uniformy: `time`, `waveAmplitude`, `waveFrequency`, `waveSpeed`, `fishLength`
+- [x] przeliczenie normalnych po deformacji (różnice skończone albo analitycznie)
 
 Gotowe gdy: ciało ryby faluje jak przy pływaniu, głowa stabilna a ogon macha najmocniej, płetwy
 ruszają się niezależnie, parametry da się zmieniać uniformami, oświetlenie poprawne na zdeformowanej
