@@ -1,0 +1,42 @@
+# ---- Visual Studio / MSBuild build outputs ----
+[Dd]ebug/
+[Rr]elease/
+x64/
+Win32/
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.exp
+*.lib.recipe
+*.log
+*.tlog
+*.lastbuildstate
+.vs/
+*.VC.db
+*.VC.opendb
+*.aps
+
+# ---- CMake build outputs ----
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+!CMakeLists.txt
+
+# ---- Heavy prebuilt Windows dependencies ----
+# These are restored locally from the GRK course framework's `dependencies/`
+# folder (Windows) or installed via brew/apt (macOS/Linux). See BUILD.md.
+/dependencies/assimp/
+/dependencies/glew-2.0.0/
+/dependencies/glfw-3.3.8.bin.WIN32/
+/dependencies/glfw-3.3.8.bin.WIN64/
+/dependencies/freeglut/
+# Keep the header-only / source-only deps that BOTH build systems need:
+!/dependencies/glm/
+!/dependencies/imgui/
+
+# ---- OS cruft ----
+.DS_Store
+Thumbs.db

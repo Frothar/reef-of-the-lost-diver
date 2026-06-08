@@ -1,0 +1,16 @@
+# ===========================================================================
+# Repo root .gitignore (group 13 - Reef of the Lost Diver)
+# Build artifacts and heavy deps inside UnderwaterScene/ are handled by
+# UnderwaterScene/.gitignore (git applies nested ignore files automatically).
+# ===========================================================================
+
+# Course lab framework — large, not our code, kept locally for reference / dep restore
+/Grafika komputerowa - projekt z zajęć/
+
+# Class-wide tracking sheet (contains other students' names & links)
+/GRK projekty 2026 - Sheet1.csv
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
