@@ -147,12 +147,12 @@ Materiały: [Catmull-Rom](https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%8
 
 Stabilne ramki orientacji wzdłuż splajnu (bez skręcania) do orientacji ryb.
 
-- [ ] PTF w `Spline.cpp` (albo osobny moduł)
-- [ ] próbkowanie splajnu w N punktach, tangent w każdym
-- [ ] ramka startowa: dowolna normalna prostopadła do pierwszego tangentu
-- [ ] dla kolejnych punktów: obrót poprzedniej normalnej do nowego tangentu (cross + kąt)
-- [ ] zapis ramek jako `(T, N, B)` albo `glm::mat4` na próbkę
-- [ ] metoda `getFrame(float t)` → pozycja, tangent, normalna, bitangent
+- [x] PTF w `Spline.cpp` (albo osobny moduł)
+- [x] próbkowanie splajnu w N punktach, tangent w każdym
+- [x] ramka startowa: dowolna normalna prostopadła do pierwszego tangentu
+- [x] dla kolejnych punktów: obrót poprzedniej normalnej do nowego tangentu (cross + kąt)
+- [x] zapis ramek jako `(T, N, B)` albo `glm::mat4` na próbkę
+- [x] metoda `getFrame(float t)` → pozycja, tangent, normalna, bitangent
 
 Gotowe gdy: obiekt na splajnie trzyma stabilną orientację (bez losowego obracania/skręcania),
 działa na krzywych o różnej krzywiźnie i na prostych odcinkach. Test: małe osie/box na każdej ramce.
