@@ -190,16 +190,21 @@ inline void drawPTFAxes()
     glUseProgram(0);
 }
 
-inline void drawSkybox()
+// Skybox podwodny (NED-05, metoda obowiazkowa M6).
+// glDepthMask(GL_FALSE) + GL_LEQUAL + trick pos.xyww w shaderze:
+//   skybox zawsze za geometria, nie nadpisuje bufora glebokosci uzyteczna wartoscia.
+inline void drawSkybox(float time)
 {
     glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_FALSE); // wylaczony zapis glebi (wymaganie NED-05)
     glUseProgram(programSkybox);
 
-    // Strip translation from the view matrix so the skybox stays centred on the camera.
+    // Uciecie translacji z macierzy widoku - skybox obraca sie z kamera, ale nie jedzie za nia.
     glm::mat4 view = glm::mat4(glm::mat3(createCameraMatrix()));
     glm::mat4 viewProjection = createPerspectiveMatrix() * view;
     glUniformMatrix4fv(glGetUniformLocation(programSkybox, "viewProjection"), 1, GL_FALSE, (float*)&viewProjection);
     glUniform3fv(glGetUniformLocation(programSkybox, "waterTint"), 1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programSkybox, "time"), time); // animowane kaustyki
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxCubemap);
@@ -210,6 +215,7 @@ inline void drawSkybox()
     glBindVertexArray(0);
 
     glUseProgram(0);
+    glDepthMask(GL_TRUE);  // przywroc zapis glebi dla reszty sceny
     glDepthFunc(GL_LESS);
 }
 
@@ -237,7 +243,7 @@ inline void renderScene(GLFWwindow* window)
     drawPTFAxes();
 
     // Skybox last (depth trick keeps it behind everything)
-    drawSkybox();
+    drawSkybox(time);
 }
 
 // ---------------------------------------------------------------------------
