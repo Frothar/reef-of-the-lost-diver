@@ -78,6 +78,12 @@ namespace {
     int    splineVertexCount = 0;
     bool   showSpline = true;
 
+    // --- PTF debug (NED-02) --------------------------------------------------
+    // Kolorowe osie (T=czerwona, N=zielona, B=niebieska) w co ktorej ramce PTF.
+    GLuint ptfAxesVAO = 0, ptfAxesVBO = 0;
+    int    ptfAxesVertexCount = 0;
+    bool   showPTF = true;
+
     float aspectRatio = 1.0f;
 
     // --- Quaternion camera (MRZ-02) ------------------------------------------
@@ -149,6 +155,41 @@ inline void drawSpline()
     glUseProgram(0);
 }
 
+// Osie PTF (NED-02): T=czerwona, N=zielona, B=niebieska, rysowane jako GL_LINES.
+// Kolor jest zakodowany w wierzcholku (dodatkowy atrybut loc=1).
+// Shader debug_line uzywa uniformu lineColor - tutaj rysujemy kazda os osobno z wlasnym kolorem.
+inline void drawPTFAxes()
+{
+    if (!showPTF || ptfAxesVertexCount < 2) return;
+
+    glUseProgram(programDebugLine);
+    glm::mat4 vp = createPerspectiveMatrix() * createCameraMatrix();
+    glUniformMatrix4fv(glGetUniformLocation(programDebugLine, "viewProjection"), 1, GL_FALSE, (float*)&vp);
+
+    glBindVertexArray(ptfAxesVAO);
+
+    // Osie sa upakowane: [poczatek T, koniec T,  poczatek N, koniec N,  poczatek B, koniec B] powtarza sie co ramke.
+    // Rysujemy je trojkami odcinkow (6 wierzcholkow na ramke), kazda os innym kolorem.
+    int framesStored = ptfAxesVertexCount / 6; // 6 wierzcholkow na ramke (3 osie x 2 punkty)
+    glm::vec3 colT(1.0f, 0.2f, 0.2f); // czerwona - tangent
+    glm::vec3 colN(0.2f, 1.0f, 0.3f); // zielona  - normalna
+    glm::vec3 colB(0.3f, 0.5f, 1.0f); // niebieska - binormalna
+
+    for (int i = 0; i < framesStored; ++i)
+    {
+        int base = i * 6;
+        glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&colT);
+        glDrawArrays(GL_LINES, base + 0, 2);
+        glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&colN);
+        glDrawArrays(GL_LINES, base + 2, 2);
+        glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&colB);
+        glDrawArrays(GL_LINES, base + 4, 2);
+    }
+
+    glBindVertexArray(0);
+    glUseProgram(0);
+}
+
 inline void drawSkybox()
 {
     glDepthFunc(GL_LEQUAL);
@@ -191,6 +232,9 @@ inline void renderScene(GLFWwindow* window)
 
     // Splajn (NED-01) - podglad sciezki dla ryb
     drawSpline();
+
+    // Osie PTF (NED-02) - weryfikacja stabilnosci ramek
+    drawPTFAxes();
 
     // Skybox last (depth trick keeps it behind everything)
     drawSkybox();
@@ -336,6 +380,46 @@ inline void init(GLFWwindow* window)
     std::cout << "[NED-01] |tangent(0.0)| = " << glm::length(debugSpline.evaluateTangent(0.0f))
               << ", |tangent(0.5)| = " << glm::length(debugSpline.evaluateTangent(0.5f)) << "\n";
 
+    // --- PTF (NED-02): buduj ramki i wgraj osie do GPU -----------------------
+    debugSpline.buildFrames(128);
+
+    // Co ktora ramke pokazujemy jako osie (zeby nie bylo za gesto).
+    const int ptfStride = 4;
+    const float axisLen = 0.35f;
+    const auto& allFrames = debugSpline.frames();
+    std::vector<glm::vec3> axisVerts;
+    axisVerts.reserve(allFrames.size() / (size_t)ptfStride * 6);
+    for (size_t fi = 0; fi < allFrames.size(); fi += (size_t)ptfStride)
+    {
+        const SplineFrame& f = allFrames[fi];
+        axisVerts.push_back(f.position);
+        axisVerts.push_back(f.position + f.T * axisLen);
+        axisVerts.push_back(f.position);
+        axisVerts.push_back(f.position + f.N * axisLen);
+        axisVerts.push_back(f.position);
+        axisVerts.push_back(f.position + f.B * axisLen);
+    }
+    ptfAxesVertexCount = (int)axisVerts.size();
+
+    glGenVertexArrays(1, &ptfAxesVAO);
+    glGenBuffers(1, &ptfAxesVBO);
+    glBindVertexArray(ptfAxesVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, ptfAxesVBO);
+    glBufferData(GL_ARRAY_BUFFER, axisVerts.size() * sizeof(glm::vec3), axisVerts.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glBindVertexArray(0);
+
+    // Test PTF w konsoli (NED-02 "done when").
+    SplineFrame f0 = debugSpline.getFrame(0.0f);
+    SplineFrame fh = debugSpline.getFrame(0.5f);
+    std::cout << "[NED-02] frame(0): T=(" << f0.T.x << "," << f0.T.y << "," << f0.T.z
+              << ") N=(" << f0.N.x << "," << f0.N.y << "," << f0.N.z << ")\n";
+    std::cout << "[NED-02] |T|=" << glm::length(f0.T) << " |N|=" << glm::length(f0.N)
+              << " dot(T,N)=" << glm::dot(f0.T, f0.N)
+              << " (powinna byc bliska 0, T i N prostopadle)\n";
+    std::cout << "[NED-02] frame(0.5): dot(T,N)=" << glm::dot(fh.T, fh.N) << "\n";
+
     int w, h; glfwGetFramebufferSize(window, &w, &h);
     framebuffer_size_callback(window, w, h);
 }
@@ -347,6 +431,8 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programDebugLine);
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
+    glDeleteVertexArrays(1, &ptfAxesVAO);
+    glDeleteBuffers(1, &ptfAxesVBO);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -375,6 +461,7 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::SliderFloat("Czulosc myszy", &mouseSensitivity, 0.02f, 0.4f);
         ImGui::Separator();
         ImGui::Checkbox("Pokaz splajn (NED-01)", &showSpline);
+        ImGui::Checkbox("Pokaz ramki PTF (NED-02)", &showPTF);
         ImGui::Separator();
         ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
