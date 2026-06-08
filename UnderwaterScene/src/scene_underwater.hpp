@@ -66,12 +66,23 @@ struct PBRMaterial
     float     roughness = 0.5f;
 };
 
+// NED-03 (A10): parametry deformacji plywania, wysylane do fish.vert.
+struct FishParams
+{
+    float waveAmplitude = 0.35f; // amplituda fali bocznej (lokalne jednostki)
+    float waveFrequency = 6.0f;  // ile fal na dlugosc ciala
+    float waveSpeed     = 5.0f;  // predkosc machania ogonem
+    float fishLength    = 1.0f;  // dlugosc ryby w lokalnym +Z (sphere.obj: polowa = 1)
+    float finAmplitude  = 0.12f; // amplituda ruchu pletw
+};
+
 namespace {
     Core::Shader_Loader shaderLoader;
 
     GLuint programPBR    = 0;
     GLuint programSkybox = 0;
     GLuint programDebugLine = 0; // NED-01 podglad splajnu
+    GLuint programFish   = 0;    // NED-03 pływanie ryb (A10)
 
     Core::RenderContext sphereContext;
     Core::RenderContext cubeContext;
@@ -112,6 +123,11 @@ namespace {
     PBRMaterial sphereMaterial = { glm::vec3(0.9f, 0.5f, 0.4f), 0.0f, 0.35f };
     PBRMaterial metalMaterial  = { glm::vec3(0.78f, 0.78f, 0.80f), 1.0f, 0.25f };
     PBRMaterial groundMaterial = { glm::vec3(0.55f, 0.48f, 0.35f), 0.0f, 0.95f };
+
+    // NED-03 (A10): animacja ryb
+    FishParams  fishParams;
+    PBRMaterial fishMaterial = { glm::vec3(0.30f, 0.55f, 0.75f), 0.1f, 0.45f }; // srebrzysto-niebieska
+    bool        showFish = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +168,43 @@ inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, c
 
     glUniform3fv(glGetUniformLocation(programPBR, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programPBR, "fogDensity"), fogDensity);
+
+    Core::DrawContext(context);
+    glUseProgram(0);
+}
+
+// NED-03 (A10): rysuje rybe z deformacja plywania w fish.vert.
+// phaseOffset pozwala desynchronizowac kilka ryb (rozne fazy machania ogonem).
+inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
+                     const PBRMaterial& material, float time, float phaseOffset)
+{
+    glUseProgram(programFish);
+
+    glm::mat4 view = createCameraMatrix();
+    glm::mat4 projection = createPerspectiveMatrix();
+
+    glUniformMatrix4fv(glGetUniformLocation(programFish, "model"),      1, GL_FALSE, (float*)&modelMatrix);
+    glUniformMatrix4fv(glGetUniformLocation(programFish, "view"),       1, GL_FALSE, (float*)&view);
+    glUniformMatrix4fv(glGetUniformLocation(programFish, "projection"), 1, GL_FALSE, (float*)&projection);
+
+    glUniform3fv(glGetUniformLocation(programFish, "cameraPos"),  1, (float*)&camera.position);
+    glUniform3fv(glGetUniformLocation(programFish, "lightDir"),   1, (float*)&sunDir);
+    glUniform3fv(glGetUniformLocation(programFish, "lightColor"), 1, (float*)&sunColor);
+
+    glUniform3fv(glGetUniformLocation(programFish, "albedo"), 1, (float*)&material.albedo);
+    glUniform1f(glGetUniformLocation(programFish, "metallic"),  material.metallic);
+    glUniform1f(glGetUniformLocation(programFish, "roughness"), material.roughness);
+
+    glUniform3fv(glGetUniformLocation(programFish, "fogColor"),  1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programFish, "fogDensity"), fogDensity);
+
+    // Parametry animacji A10 (phaseOffset wchodzi w czas, wiec rozne ryby macha inaczej)
+    glUniform1f(glGetUniformLocation(programFish, "time"),          time + phaseOffset);
+    glUniform1f(glGetUniformLocation(programFish, "waveAmplitude"), fishParams.waveAmplitude);
+    glUniform1f(glGetUniformLocation(programFish, "waveFrequency"), fishParams.waveFrequency);
+    glUniform1f(glGetUniformLocation(programFish, "waveSpeed"),     fishParams.waveSpeed);
+    glUniform1f(glGetUniformLocation(programFish, "fishLength"),    fishParams.fishLength);
+    glUniform1f(glGetUniformLocation(programFish, "finAmplitude"),  fishParams.finAmplitude);
 
     Core::DrawContext(context);
     glUseProgram(0);
@@ -264,6 +317,29 @@ inline void renderScene(GLFWwindow* window)
             glm::rotate((float)time * 0.4f, glm::vec3(0.0f, 1.0f, 0.0f)) *
             glm::scale(glm::vec3(metalCubeScale)),
         metalMaterial);
+
+    // --- Ryby (NED-03, A10): falowanie ciala w fish.vert ---
+    // Placeholder ciala: sphere.obj rozciagnieta wzdluz Z (elipsoida ~ ryba).
+    // Glowa przy -Z (stabilna), ogon przy +Z (macha). NED-04 wpusci je na splajn z PTF.
+    if (showFish)
+    {
+        glm::vec3 fishPositions[3] = {
+            glm::vec3(-3.0f, 1.6f,  1.0f),
+            glm::vec3( 0.5f, 2.2f, -1.5f),
+            glm::vec3( 3.5f, 0.9f,  2.0f),
+        };
+        float fishPhase[3] = { 0.0f, 1.7f, 3.4f };
+        float fishYaw[3]   = { 0.4f, -0.8f, 2.1f };
+        glm::vec3 fishScale = glm::vec3(0.35f, 0.5f, 1.4f); // smukle, dlugie wzdluz Z
+
+        for (int i = 0; i < 3; ++i)
+        {
+            glm::mat4 m = glm::translate(fishPositions[i] + glm::vec3(0.0f, 0.15f * std::sin(time + fishPhase[i]), 0.0f))
+                        * glm::rotate(fishYaw[i], glm::vec3(0.0f, 1.0f, 0.0f))
+                        * glm::scale(fishScale);
+            drawFish(sphereContext, m, fishMaterial, time, fishPhase[i]);
+        }
+    }
 
     // Splajn (NED-01) - podglad sciezki dla ryb
     drawSpline();
@@ -383,6 +459,9 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/skybox.vert", (char*)"shaders/skybox.frag");
     programDebugLine = shaderLoader.CreateProgram(
         (char*)"shaders/debug_line.vert", (char*)"shaders/debug_line.frag");
+    // NED-03: fish.vert deformuje, oswietlenie wspolne z pbr.frag (spojnosc z OLE-01)
+    programFish = shaderLoader.CreateProgram(
+        (char*)"shaders/fish.vert", (char*)"shaders/pbr.frag");
 
     if (!loadModelToContext("./models/sphere.obj", sphereContext))
         std::cout << "Brak models/sphere.obj – dodaj model kuli do folderu models/" << std::endl;
@@ -486,6 +565,7 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programPBR);
     shaderLoader.DeleteProgram(programSkybox);
     shaderLoader.DeleteProgram(programDebugLine);
+    shaderLoader.DeleteProgram(programFish);
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
     glDeleteVertexArrays(1, &ptfAxesVAO);
@@ -521,6 +601,13 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::Separator();
         ImGui::Checkbox("Pokaz splajn (NED-01)", &showSpline);
         ImGui::Checkbox("Pokaz ramki PTF (NED-02)", &showPTF);
+        ImGui::Separator();
+        ImGui::Text("NED-03 Ryby (A10)");
+        ImGui::Checkbox("Pokaz ryby", &showFish);
+        ImGui::SliderFloat("Wave amplitude", &fishParams.waveAmplitude, 0.0f, 1.0f);
+        ImGui::SliderFloat("Wave frequency", &fishParams.waveFrequency, 0.5f, 15.0f);
+        ImGui::SliderFloat("Wave speed",     &fishParams.waveSpeed,     0.0f, 15.0f);
+        ImGui::SliderFloat("Fin amplitude",  &fishParams.finAmplitude,  0.0f, 0.5f);
         ImGui::Separator();
         ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
