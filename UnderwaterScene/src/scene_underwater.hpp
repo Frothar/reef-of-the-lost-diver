@@ -72,6 +72,7 @@ namespace {
     GLuint programPBR    = 0;
     GLuint programSkybox = 0;
     GLuint programDebugLine = 0; // NED-01 podglad splajnu
+    GLuint programWaterOverlay = 0; // pelnoekranowy efekt wody
 
     Core::RenderContext sphereContext;
     Core::RenderContext cubeContext;
@@ -91,6 +92,11 @@ namespace {
     GLuint ptfAxesVAO = 0, ptfAxesVBO = 0;
     int    ptfAxesVertexCount = 0;
     bool   showPTF = true;
+
+    // --- Pelnoekranowy efekt wody --------------------------------------------
+    GLuint waterQuadVAO = 0, waterQuadVBO = 0;
+    bool   showWaterOverlay = true;
+    float  waterOverlayStrength = 0.7f;
 
     float aspectRatio = 1.0f;
 
@@ -239,6 +245,30 @@ inline void drawSkybox(float time)
     glDepthFunc(GL_LESS);
 }
 
+// Pelnoekranowy efekt wody - rysowany jako OSTATNI, na wierzchu calej sceny.
+// Alpha blending + wylaczony test/zapis glebi (overlay nie nalezy do geometrii 3D).
+inline void drawWaterOverlay(float time)
+{
+    if (!showWaterOverlay || waterOverlayStrength <= 0.0f) return;
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glUseProgram(programWaterOverlay);
+    glUniform3fv(glGetUniformLocation(programWaterOverlay, "waterColor"), 1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programWaterOverlay, "time"), time);
+    glUniform1f(glGetUniformLocation(programWaterOverlay, "overlayStrength"), waterOverlayStrength);
+
+    glBindVertexArray(waterQuadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
 inline void renderScene(GLFWwindow* window)
 {
     glClearColor(waterColor.r * 0.6f, waterColor.g * 0.7f, waterColor.b * 0.8f, 1.0f);
@@ -273,6 +303,9 @@ inline void renderScene(GLFWwindow* window)
 
     // Skybox last (depth trick keeps it behind everything)
     drawSkybox(time);
+
+    // Pelnoekranowy efekt wody na samym wierzchu (po skyboxie i geometrii)
+    drawWaterOverlay(time);
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +416,8 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/skybox.vert", (char*)"shaders/skybox.frag");
     programDebugLine = shaderLoader.CreateProgram(
         (char*)"shaders/debug_line.vert", (char*)"shaders/debug_line.frag");
+    programWaterOverlay = shaderLoader.CreateProgram(
+        (char*)"shaders/water_overlay.vert", (char*)"shaders/water_overlay.frag");
 
     if (!loadModelToContext("./models/sphere.obj", sphereContext))
         std::cout << "Brak models/sphere.obj – dodaj model kuli do folderu models/" << std::endl;
@@ -399,6 +434,20 @@ inline void init(GLFWwindow* window)
     glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
+
+    // Fullscreen quad (2 trojkaty) dla overlayu wody - pozycje w NDC
+    static const float waterQuadVerts[] = {
+        -1.0f, -1.0f,   1.0f, -1.0f,   1.0f,  1.0f,
+        -1.0f, -1.0f,   1.0f,  1.0f,  -1.0f,  1.0f
+    };
+    glGenVertexArrays(1, &waterQuadVAO);
+    glGenBuffers(1, &waterQuadVBO);
+    glBindVertexArray(waterQuadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, waterQuadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(waterQuadVerts), waterQuadVerts, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glBindVertexArray(0);
 
     // Cubemap faces: +X, -X, +Y, -Y, +Z, -Z
@@ -486,10 +535,13 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programPBR);
     shaderLoader.DeleteProgram(programSkybox);
     shaderLoader.DeleteProgram(programDebugLine);
+    shaderLoader.DeleteProgram(programWaterOverlay);
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
     glDeleteVertexArrays(1, &ptfAxesVAO);
     glDeleteBuffers(1, &ptfAxesVBO);
+    glDeleteVertexArrays(1, &waterQuadVAO);
+    glDeleteBuffers(1, &waterQuadVBO);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -521,6 +573,9 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::Separator();
         ImGui::Checkbox("Pokaz splajn (NED-01)", &showSpline);
         ImGui::Checkbox("Pokaz ramki PTF (NED-02)", &showPTF);
+        ImGui::Separator();
+        ImGui::Checkbox("Efekt wody (overlay)", &showWaterOverlay);
+        ImGui::SliderFloat("Sila efektu wody", &waterOverlayStrength, 0.0f, 1.0f);
         ImGui::Separator();
         ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
