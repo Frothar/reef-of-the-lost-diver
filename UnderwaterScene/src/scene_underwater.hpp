@@ -69,11 +69,11 @@ struct PBRMaterial
 // NED-03 (A10): parametry deformacji plywania, wysylane do fish.vert.
 struct FishParams
 {
-    float waveAmplitude = 0.35f; // amplituda fali bocznej (lokalne jednostki)
+    float waveAmplitude = 0.12f; // amplituda fali bocznej (lokalne jednostki)
     float waveFrequency = 6.0f;  // ile fal na dlugosc ciala
-    float waveSpeed     = 5.0f;  // predkosc machania ogonem
-    float fishLength    = 1.0f;  // dlugosc ryby w lokalnym +Z (sphere.obj: polowa = 1)
-    float finAmplitude  = 0.12f; // amplituda ruchu pletw
+    float waveSpeed     = 4.0f;  // predkosc machania ogonem
+    float fishLength    = 1.0f;  // dlugosc ryby w lokalnym +Z (fish.obj: glowa z=0, ogon z=1)
+    float finAmplitude  = 0.08f; // amplituda ruchu pletw (piersiowe wystaja w X)
 };
 
 namespace {
@@ -87,6 +87,7 @@ namespace {
     Core::RenderContext sphereContext;
     Core::RenderContext cubeContext;
     Core::RenderContext groundContext; // re-uses the cube model, scaled flat
+    Core::RenderContext fishContext;   // NED-03/ALL-01 model ryby (models/fish.obj)
 
     GLuint skyboxVAO = 0, skyboxVBO = 0;
     GLuint skyboxCubemap = 0;
@@ -124,7 +125,7 @@ namespace {
     PBRMaterial metalMaterial  = { glm::vec3(0.78f, 0.78f, 0.80f), 1.0f, 0.25f };
     PBRMaterial groundMaterial = { glm::vec3(0.55f, 0.48f, 0.35f), 0.0f, 0.95f };
 
-    // NED-03 (A10): animacja ryb
+    // NED-03 (A10): animacja ryb (domyslne dostrojone do modelu models/fish.obj)
     FishParams  fishParams;
     PBRMaterial fishMaterial = { glm::vec3(0.30f, 0.55f, 0.75f), 0.1f, 0.45f }; // srebrzysto-niebieska
     bool        showFish = true;
@@ -323,6 +324,10 @@ inline void renderScene(GLFWwindow* window)
     // Glowa przy -Z (stabilna), ogon przy +Z (macha). NED-04 wpusci je na splajn z PTF.
     if (showFish)
     {
+        // fish.obj ma juz proporcje ryby (glowa -Z, ogon +Z) - skalujemy JEDNOLICIE,
+        // zeby nie zniekształcić ksztaltu. Fallback na kule jesli model sie nie wczytal.
+        Core::RenderContext& fishMesh = (fishContext.vertexArray != 0) ? fishContext : sphereContext;
+
         glm::vec3 fishPositions[3] = {
             glm::vec3(-3.0f, 1.6f,  1.0f),
             glm::vec3( 0.5f, 2.2f, -1.5f),
@@ -330,14 +335,14 @@ inline void renderScene(GLFWwindow* window)
         };
         float fishPhase[3] = { 0.0f, 1.7f, 3.4f };
         float fishYaw[3]   = { 0.4f, -0.8f, 2.1f };
-        glm::vec3 fishScale = glm::vec3(0.35f, 0.5f, 1.4f); // smukle, dlugie wzdluz Z
+        float fishScale    = 1.6f; // jednolita skala
 
         for (int i = 0; i < 3; ++i)
         {
             glm::mat4 m = glm::translate(fishPositions[i] + glm::vec3(0.0f, 0.15f * std::sin(time + fishPhase[i]), 0.0f))
                         * glm::rotate(fishYaw[i], glm::vec3(0.0f, 1.0f, 0.0f))
-                        * glm::scale(fishScale);
-            drawFish(sphereContext, m, fishMaterial, time, fishPhase[i]);
+                        * glm::scale(glm::vec3(fishScale));
+            drawFish(fishMesh, m, fishMaterial, time, fishPhase[i]);
         }
     }
 
@@ -469,6 +474,8 @@ inline void init(GLFWwindow* window)
         std::cout << "Brak models/cube.obj – metal cube nie bedzie widoczny" << std::endl;
     if (!loadModelToContext("./models/cube.obj", groundContext))
         std::cout << "Brak models/cube.obj – dno nie bedzie widoczne" << std::endl;
+    if (!loadModelToContext("./models/fish.obj", fishContext))
+        std::cout << "Brak models/fish.obj – ryby beda uzywac kuli jako placeholdera" << std::endl;
 
     // Skybox VAO
     glGenVertexArrays(1, &skyboxVAO);
