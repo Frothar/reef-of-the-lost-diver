@@ -37,6 +37,9 @@ CMakeFiles/
 !/dependencies/glm/
 !/dependencies/imgui/
 
+# ---- ImGui runtime state (per-machine window layout) ----
+imgui.ini
+
 # ---- OS cruft ----
 .DS_Store
 Thumbs.db
