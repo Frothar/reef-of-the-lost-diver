@@ -1,107 +1,84 @@
-# Building — Reef of the Lost Diver
+# Jak zbudować projekt
 
-The team works in **Visual Studio on Windows**. This is the supported build path.
-The project targets **OpenGL 4.1 core / GLSL 410**.
+Robimy wszyscy w **Visual Studio na Windowsie** - i to jest droga, którą wspieramy.
+Projekt chodzi na OpenGL 4.1 (shadery `#version 410`).
 
----
+## Raz na początku (każdy u siebie)
 
-## 1. First-time setup (every teammate, once)
+### 1. Visual Studio z C++
 
-### a) Install Visual Studio with the C++ workload
+Zainstaluj **Visual Studio 2022 albo 2026** (wystarczy Community) i w instalatorze zaznacz
+pakiet **"Programowanie aplikacji klasycznych w C++"** (Desktop development with C++).
+Bez tego nie ma kompilatora i nic się nie zbuduje.
 
-Install **Visual Studio 2022 or 2026** (Community is free) and, in the Visual Studio
-Installer, tick the **"Desktop development with C++"** workload. Without it there is no
-C++ compiler and nothing builds.
+### 2. Dorzuć biblioteki
 
-### b) Restore the prebuilt libraries
+Ciężkie biblioteki Windows nie są w repo (są w .gitignore). Po sklonowaniu trzeba je wrzucić
+z powrotem do `UnderwaterScene/dependencies/`:
 
-The heavy Windows libraries are **not** in the git repo (they are git-ignored). After
-cloning you must put them back into `UnderwaterScene/dependencies/`:
+Skopiuj folder `dependencies/` z frameworka z zajęć
+(`Grafika komputerowa - projekt z zajęć/grk/cw 7/dependencies`) do `UnderwaterScene/`, tak żeby
+w `UnderwaterScene/dependencies/` były: `assimp/`, `glew-2.0.0/`, `glfw-3.3.8.bin.WIN32/`,
+`glm/`, `imgui/`.
 
-> Copy the **`dependencies/`** folder from the GRK course framework
-> (`Grafika komputerowa - projekt z zajęć/grk/cw 7/dependencies`) into
-> `UnderwaterScene/` so the folder `UnderwaterScene/dependencies/` contains
-> `assimp/`, `glew-2.0.0/`, `glfw-3.3.8.bin.WIN32/`, `glm/`, `imgui/`.
+(`glm/` i `imgui/` już są w repo, resztę bierzesz z frameworka.)
 
-*(`glm/` and `imgui/` are already committed to the repo; the rest come from the course
-framework.)*
+DLL-ki potrzebne przy uruchomieniu (`glew32.dll`, `glfw3.dll`, `assimp-*.dll`, `zlib*.dll`)
+siedzą w głównym folderze projektu i kopiują się same obok .exe po buildzie.
 
-The runtime DLLs (`glew32.dll`, `glfw3.dll`, `assimp-*.dll`, `zlib*.dll`) are committed in
-the project root, and a post-build step copies them next to the executable automatically.
+## Budowanie i odpalanie
 
----
+1. Otwórz `UnderwaterScene.sln` w Visual Studio.
+2. Upewnij się, że konfiguracja to `Debug | x86` (biblioteki są 32-bit, więc **nie** zmieniaj na x64).
+3. Wciśnij F5 (build + uruchomienie z debuggerem) albo Ctrl+F5 (samo uruchomienie).
 
-## 2. Build & run
+Katalog roboczy jest ustawiony na folder projektu, więc ścieżki do `shaders/`, `models/`
+i `textures/` działają.
 
-1. Open **`UnderwaterScene.sln`** in Visual Studio.
-2. Make sure the configuration is **`Debug | x86`** (the bundled libraries are 32-bit —
-   **do not** switch to x64).
-3. Press **F5** (build + run with debugger) or **Ctrl+F5** (run without debugger).
+## Problem z toolsetem (ważne, jak macie różne wersje VS)
 
-The debugger working directory is set to the project folder, so the relative asset paths
-(`shaders/`, `models/`, `textures/`) resolve correctly.
+Projekt jest ustawiony na toolset **v145 (Visual Studio 2026)**. Jak otworzysz go w
+**VS 2022**, wyskoczy coś w stylu "v145 build tools not found".
 
----
+Naprawa u siebie: prawym na projekt w Solution Explorer, "Retarget Projects", wybierz
+toolset który masz (np. **v143** dla VS 2022), OK.
 
-## 3. Toolset mismatch (important for the team)
+Żeby nie robić bałaganu w historii - albo umówcie się na jedną wersję VS, albo po prostu
+retargetujcie lokalnie i nie commitujcie tej jednej zmiany w `.vcxproj`.
 
-The project's platform toolset is set to **v145 (Visual Studio 2026)**. If you open it in
-**Visual Studio 2022**, you will get an error like *"v145 build tools not found"*.
+## Jak coś nie działa
 
-Fix it locally:
+- `MSB8020: v145 build tools not found` - retarget (patrz wyżej)
+- `cannot open ... glew32.lib / glfw3.lib / assimp-*.lib` - nie dorzuciłeś `dependencies/` (punkt 2)
+- Aplikacja odpala się i od razu zamyka, w konsoli `ERROR::ASSIMP` albo błąd cubemapy - zły katalog
+  roboczy, odpalaj przez F5 w VS, a nie klikając .exe w folderze `Debug/`
+- Okienko z brakującym `.dll` przy ręcznym odpaleniu .exe - odpal przez F5 albo skopiuj DLL-ki obok .exe
+- Czarny ekran - zerknij do konsoli czy nie ma błędu kompilacji shadera; GLSL musi zostać `#version 410`
 
-> Right-click the project in Solution Explorer → **Retarget Projects** → pick the toolset
-> you have installed (e.g. **v143** for VS 2022) → OK.
+## Sterowanie w szkielecie
 
-To avoid churn, **agree as a team on one Visual Studio version**, or simply retarget
-locally and don't commit that one-line change in `UnderwaterScene.vcxproj`.
+- `WSAD` - pływanie
+- `Spacja` / `Lewy Ctrl` - góra / dół
+- `Lewy Shift` (przytrzymane) - szybciej
+- mysz - rozglądanie
+- `Tab` - przełącz mysz / panel ImGui
+- `Esc` - wyjście
 
----
+Ta kamera to tymczasowy placeholder, docelowo zastępuje ją kamera na kwaternionach (zadanie MRZ-02).
 
-## 4. Troubleshooting
+## Co jest w szkielecie
 
-| Symptom | Fix |
-|---------|-----|
-| `MSB8020: v145 build tools not found` | Retarget Projects (see §3) |
-| `cannot open ... glew32.lib / glfw3.lib / assimp-*.lib` | `dependencies/` not restored — see §1b |
-| App starts then closes, console shows `ERROR::ASSIMP` or cubemap load fail | Wrong working directory — run from Visual Studio (F5), not by double-clicking the exe in `Debug/` |
-| Missing `.dll` popup when running the exe directly | Run via F5, or copy the root `*.dll` next to the exe |
-| Black window | Check the console for shader-compile errors; GLSL must stay `#version 410` |
+- okno + kontekst OpenGL 4.1, GLEW, GLFW, panelik ImGui
+- klasy Core z zajęć: `Shader_Loader`, `Render_Utils` (RenderContext, DrawContext, wczytywanie
+  modeli przez Assimp), `Texture` (LoadTexture, LoadCubemap, SetActiveTexture), `Camera`, SOIL
+- skybox z cubemapy, oświetlone dno i testowa kula, no i mgła podwodna
+- shadery `#version 410 core`: `underwater.vert/frag`, `skybox.vert/frag`
 
----
+Stąd budujemy dalej rzeczy z `../TASKS.md`.
 
-## Controls (starter scene)
+## Inne systemy (opcjonalnie, nie testowane)
 
-| Input | Action |
-|-------|--------|
-| `W A S D` | Swim forward / left / back / right |
-| `Space` / `Left Ctrl` | Ascend / descend |
-| `Left Shift` (hold) | Boost speed |
-| Mouse | Look around |
-| `Tab` | Toggle mouse-look ↔ ImGui panel |
-| `Esc` | Quit |
-
-The free-fly camera here is a placeholder — replace it with the quaternion camera
-(task `MRZ-02`).
-
----
-
-## What's in the starter
-
-- Window + OpenGL 4.1 context, GLEW, GLFW, ImGui debug panel
-- `Core` framework from the course labs: `Shader_Loader`, `Render_Utils`
-  (`RenderContext`, `DrawContext`, Assimp mesh loading), `Texture`
-  (`LoadTexture`, `LoadCubemap`, `SetActiveTexture`), `Camera`, SOIL
-- Cubemap skybox + lit seabed + a test sphere, with exponential underwater fog
-- Shaders in `#version 410 core`: `underwater.vert/frag`, `skybox.vert/frag`
-
-From here, implement the modules listed in `../TASKS.md`.
-
----
-
-## Other platforms (optional, unsupported)
-
-A `CMakeLists.txt` exists for macOS/Linux (`brew install glfw glew assimp` /
-`apt install libglfw3-dev libglew-dev libassimp-dev`, then `cmake -S . -B build &&
-cmake --build build`). The team builds on Windows/VS, so this path is not actively
-tested — use it only if you specifically need a non-Windows build.
+Jest też `CMakeLists.txt` pod Maca/Linuksa (`brew install glfw glew assimp` albo
+`apt install libglfw3-dev libglew-dev libassimp-dev`, potem `cmake -S . -B build &&
+cmake --build build`). My robimy na Windows/VS, więc to nie jest sprawdzane - używaj tylko
+jak naprawdę musisz zbudować poza Windowsem.

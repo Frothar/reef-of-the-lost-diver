@@ -1,723 +1,427 @@
-# 📋 Task Board — GRK Underwater Scene (A10 + B13)
+# Tablica zadań - podwodna scena (A10 + B13)
 
-> Track progress by marking tasks: `[ ]` → `[/]` (in progress) → `[x]` (done)
+Postęp odhaczamy tak: `[ ]` (nie zaczęte) → `[/]` (w trakcie) → `[x]` (zrobione).
 
----
+## Podział roboty
 
-## ⚖️ Workload Balance
+- **Olejnik** - metody obowiązkowe M1 (normal mapping), M2 (PBR), M4 (cienie). Razem ~30h.
+  To jeden spójny pipeline shaderowy (PBR + normalne + cienie = jeden system).
+- **Nędzyński** - metody obowiązkowe M5 (PTF), M6 (skybox) + metoda A10 (pływanie ryb, 30 pkt). ~31h.
+  A10 samo w sobie jest warte tyle co wszystkie metody obowiązkowe razem.
+- **Mróz** - metoda obowiązkowa M3 (kamera) + B13 (ruchome światła, 15 pkt) + cała infrastruktura
+  (setup, modele, scena, bąbelki, interakcje, sklejenie). ~32h. Mniej matmy, więcej klejenia
+  wszystkiego do kupy.
 
-| Person | Mandatory Methods | Chosen Methods | Effort Estimate | Tasks |
-|--------|-------------------|----------------|-----------------|-------|
-| **Olejnik** | M1 Normal mapping, M2 PBR, M4 Shadow mapping | — (shader support for all) | ~30h | 7 |
-| **Nędzyński** | M5 PTF, M6 Skybox | A10 Fish animation (30 pts) | ~31h | 7 |
-| **Mróz** | M3 Quaternion camera | B13 Moving lights (15 pts) | ~32h | 8 |
-| **Shared** | — | — | ~8h | 5 |
-
-> [!NOTE]
-> Olejnik has 3 mandatory methods but they form one tightly coupled shader pipeline (PBR + normals + shadows = single system).
-> Nędzyński owns A10 which alone is worth 30 pts (= all 6 mandatory methods combined).
-> Mróz owns infrastructure + B13 + particles — essential glue that holds the project together.
+Priorytety: **P0** blokuje inne zadania, **P1** trzeba mieć na ocenę, **P2** dla spójności wizualnej,
+**P3** miłe dodatki jak starczy czasu.
 
 ---
 
-## 🔴 Priority Legend
+# Olejnik - rendering i shadery
 
-| Label | Meaning |
-|-------|---------|
-| 🔴 **P0** | Blocker — other tasks depend on this |
-| 🟠 **P1** | Core — required for grading |
-| 🟡 **P2** | Important — needed for visual coherence |
-| 🟢 **P3** | Nice to have — bonus polish |
+Ogarnia PBR + normal mapping + cienie + obsługę wielu świateł. ~30h.
 
----
+## OLE-01 (P0) Shader PBR - podstawa (~6h) - tydzień 1
 
-# 👤 Olejnik — Rendering Pipeline & Shaders
+Bazowy fragment shader z Cook-Torrance BRDF (na sztywnych materiałach, jedno światło kierunkowe).
 
-> **Focus:** PBR + normal mapping + shadow mapping + multi-light shader support
-> **Mandatory methods:** M1 (Normal mapping), M2 (PBR lighting), M4 (Shadow mapping)
-> **Estimated effort:** ~30 hours
+- [ ] `shaders/pbr.vert` - pozycja, normalna, texCoords do world space, macierz TBN
+- [ ] `shaders/pbr.frag` - Cook-Torrance z GGX (D), Schlick (F), Smith (G)
+- [ ] jedno światło kierunkowe (słońce przez wodę)
+- [ ] tone mapping (Reinhard albo ACES) + korekcja gamma
+- [ ] test na sztywnych wartościach albedo/metallic/roughness na prostym meshu
 
----
+Jak wiemy, że gotowe: kula/kostka renderuje się z poprawnym PBR (highlight zmienia się z roughness),
+metallic=0 wygląda jak plastik/kamień, metallic=1 jak metal.
 
-### `OLE-01` 🔴 P0 · PBR Shader — Basic Setup (~6h)
-**Week 1**
+Zależy od: okna od Mroza (MRZ-01) i jakiegoś wczytanego modelu.
+Materiały: [LearnOpenGL PBR Theory](https://learnopengl.com/PBR/Theory),
+[PBR Lighting](https://learnopengl.com/PBR/Lighting).
 
-Write the base PBR fragment shader with the Cook-Torrance BRDF (hardcoded material params, single directional light).
+## OLE-02 (P1) Shader PBR - tekstury (~4h) - tydzień 2
 
-**What to do:**
-- [ ] Create `shaders/pbr.vert` — transform position, normal, texCoords to world space; pass TBN matrix
-- [ ] Create `shaders/pbr.frag` — implement Cook-Torrance with GGX (D), Schlick (F), Smith (G)
-- [ ] Support a single directional light (sun through water)
-- [ ] Add Reinhard or ACES tone mapping + gamma correction
-- [ ] Test with hardcoded albedo, metallic, roughness values on a simple mesh
+Czytanie materiałów z tekstur zamiast ze sztywnych wartości.
 
-**Acceptance criteria:**
-- A sphere or cube renders with visually correct PBR shading (specular highlight changes with roughness)
-- Metallic = 0 looks like plastic/stone, metallic = 1 looks like metal
+- [ ] samplery: `albedoMap`, `metallicMap`, `roughnessMap`, `aoMap`
+- [ ] flaga `useTexture` (albo maska) na mapę, żeby obiekty bez tekstur dalej działały
+- [ ] kod w C++ do wczytywania materiałów (tekstury, bindowanie do jednostek)
+- [ ] test na min. 2 zestawach tekstur (np. piasek + zardzewiały metal)
 
-**Dependencies:** Needs Mróz's window/context init (`MRZ-01`) and a loaded test model
+Gotowe gdy: obiekty renderują się z pełnymi zestawami PBR z [ambientCG](https://ambientcg.com),
+a te bez tekstur wracają do wartości uniform.
 
-**Resources:**
-- [LearnOpenGL — PBR Theory](https://learnopengl.com/PBR/Theory)
-- [LearnOpenGL — PBR Lighting](https://learnopengl.com/PBR/Lighting)
+Zależy od: OLE-01.
 
----
+## OLE-03 (P1) Normal mapping (~5h) - tydzień 2 - METODA OBOWIĄZKOWA M1
 
-### `OLE-02` 🟠 P1 · PBR Shader — Texture Maps (~4h)
-**Week 2**
+Normal mapping w przestrzeni stycznej, wpięty w shader PBR.
 
-Extend the PBR shader to read material properties from texture maps instead of uniforms.
+- [ ] tangent + bitangent na wierzchołek (Assimp to liczy)
+- [ ] macierz TBN w vertex shaderze, przekazana do fragmentu
+- [ ] we fragmencie: próbka z normal mapy, przemapowanie [0,1] → [-1,1], transformacja przez TBN
+- [ ] użycie zaburzonej normalnej `N` we wszystkich obliczeniach PBR
+- [ ] na min. 2 materiałach (dno + kadłub wraka albo koral)
 
-**What to do:**
-- [ ] Add sampler uniforms: `albedoMap`, `metallicMap`, `roughnessMap`, `aoMap`
-- [ ] Add a `useTexture` flag (or bitmask) per map so objects without textures still work
-- [ ] Implement material loading code in C++ (load textures, bind to correct units)
-- [ ] Test with at least 2 different PBR texture sets (e.g. sand + rusty metal)
+Gotowe gdy: powierzchnia ma widoczne wyboje reagujące na światło, wyłączenie normal mapy daje
+wyraźnie płaski wygląd, brak szwów na granicach UV.
 
-**Acceptance criteria:**
-- Objects render correctly with full PBR texture sets from [ambientCG](https://ambientcg.com)
-- Objects without texture maps fall back to uniform values
+Zależy od: OLE-02. Materiały: [LearnOpenGL Normal Mapping](https://learnopengl.com/Advanced-Lighting/Normal-Mapping).
 
-**Dependencies:** `OLE-01`
+## OLE-04 (P1) Shadow mapping (~8h) - tydzień 2 - METODA OBOWIĄZKOWA M4
 
----
+Cienie dla głównego światła kierunkowego z filtrowaniem PCF.
 
-### `OLE-03` 🟠 P1 · Normal Mapping (~5h)
-**Week 2** | **⭐ MANDATORY METHOD M1**
+- [ ] FBO tylko z głębią (tekstura 2048x2048, `GL_DEPTH_COMPONENT`)
+- [ ] `shaders/shadow_depth.vert` + `.frag` - minimalny shader zapisujący głębię
+- [ ] macierz ortho + view dla światła
+- [ ] przebieg cieni: renderowanie geometrii do FBO głębi
+- [ ] przebieg główny: fragment do przestrzeni światła, próbka mapy cieni, porównanie głębi
+- [ ] bias zależny od kąta: `bias = max(0.05 * (1.0 - dot(N, L)), 0.005)`
+- [ ] PCF 3x3 na miękkie krawędzie
+- [ ] wpięcie współczynnika cienia w wyjście shadera PBR
 
-Implement tangent-space normal mapping integrated into the PBR shader.
+Gotowe gdy: wrak (albo duży obiekt) rzuca widoczny cień na dno, brak migoczących kropek na
+oświetlonych powierzchniach, krawędzie miękkie a nie poszarpane.
 
-**What to do:**
-- [ ] Compute or load tangent + bitangent per vertex (Assimp can provide these)
-- [ ] Build the TBN matrix in the vertex shader and pass to fragment shader
-- [ ] In the fragment shader: sample normal map, remap from [0,1] to [-1,1], transform via TBN
-- [ ] Use perturbed normal `N` in all PBR lighting calculations
-- [ ] Apply on **at least 2 different materials** (sand seabed + shipwreck hull or coral)
+Zależy od: OLE-01 i tego, żeby Mróz miał min. 2 obiekty w scenie.
+Materiały: [LearnOpenGL Shadow Mapping](https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping).
 
-**Acceptance criteria:**
-- Surface shows visible bumps/detail that reacts to light direction
-- Toggling the normal map off shows a clearly flatter surface
-- No visible seam artifacts at UV boundaries
+## OLE-05 (P1) Wiele świateł w shaderze PBR (~4h) - tydzień 2-3
 
-**Dependencies:** `OLE-02`
+Obsługa wielu typów świateł z systemu Mroza.
 
-**Resources:**
-- [LearnOpenGL — Normal Mapping](https://learnopengl.com/Advanced-Lighting/Normal-Mapping)
+- [ ] tablice uniform `PointLight[MAX]` i `SpotLight[MAX]`
+- [ ] `calcPointLight()` - PBR z tłumieniem punktowym
+- [ ] `calcSpotLight()` - PBR ze stożkiem reflektora + tłumienie
+- [ ] sumowanie radiancji `Lo` po wszystkich aktywnych światłach
+- [ ] dogadać z Mrozem układ struktur i nazwy uniformów
 
----
+Gotowe gdy: scena dobrze oświetlona słońcem + ruchomymi światłami + reflektorem, punktowe mają
+widoczny spadek z odległością, reflektor ma stożek (inner/outer cutoff).
 
-### `OLE-04` 🟠 P1 · Shadow Mapping (~8h)
-**Week 2** | **⭐ MANDATORY METHOD M4**
+Zależy od: OLE-01, MRZ-05.
 
-Implement shadow mapping for the main directional light with PCF filtering.
+## OLE-06 (P2) Poprawki i polerka cieni (~3h) - tydzień 3
 
-**What to do:**
-- [ ] Create a depth-only FBO (2048×2048 texture, `GL_DEPTH_COMPONENT`)
-- [ ] Create `shaders/shadow_depth.vert` + `shaders/shadow_depth.frag` — minimal depth-write shader
-- [ ] Set up the light's orthographic projection + view matrix
-- [ ] **Shadow pass:** Render all shadow-casting geometry to the depth FBO
-- [ ] **Main pass:** Transform fragment to light space, sample shadow map, compare depths
-- [ ] Add slope-scaled bias: `bias = max(0.05 * (1.0 - dot(N, L)), 0.005)`
-- [ ] Implement 3×3 PCF for soft shadow edges
-- [ ] Integrate shadow factor into the PBR shader output
+- [ ] peter-panning (cień odkleja się od obiektu) - poprawa biasu
+- [ ] pokrycie mapy cieni (obiekty poza frustum światła) - poprawa rozmiaru ortho
+- [ ] opcjonalnie front-face culling w przebiegu cieni
+- [ ] opcjonalnie druga mapa cieni dla reflektora latarki
 
-**Acceptance criteria:**
-- The shipwreck (or large object) casts visible shadows onto the seabed
-- No shadow acne (flickering dots on lit surfaces)
-- Shadow edges are soft, not pixel-jagged
+Gotowe gdy: brak artefaktów z typowych kątów kamery, światło nie przecieka przez obiekty.
+Zależy od: OLE-04.
 
-**Dependencies:** `OLE-01`, Mróz needs to have at least 2 objects in the scene
+## OLE-07 (P3) Post-processing - kolorystyka podwodna (~3h) - tydzień 3-4
 
-**Resources:**
-- [LearnOpenGL — Shadow Mapping](https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping)
+- [ ] renderowanie sceny do pośredniego FBO (kolor + głębia)
+- [ ] fullscreen quad z niebiesko-zielonym tintem
+- [ ] mgła zależna od głębi (wykładnicza, niebiesko-zielona)
+- [ ] opcjonalnie lekka aberracja chromatyczna / zniekształcenie na brzegach
+
+Gotowe gdy: scena bardziej "podwodna", parametry łatwe do podkręcenia.
+Zależy od: reszty renderingu.
 
 ---
 
-### `OLE-05` 🟠 P1 · Multi-Light Support in PBR Shader (~4h)
-**Week 2–3**
+# Nędzyński - animacja, fizyka, środowisko
 
-Extend the PBR shader to handle multiple light types from Mróz's light system.
+Ryby (A10) + PTF + skybox + meduzy. ~31h.
 
-**What to do:**
-- [ ] Add uniform arrays for `PointLight[MAX_POINT_LIGHTS]` and `SpotLight[MAX_SPOT_LIGHTS]`
-- [ ] Implement `calcPointLight()` — PBR with point light attenuation
-- [ ] Implement `calcSpotLight()` — PBR with spotlight cone + attenuation
-- [ ] Accumulate radiance `Lo` across all active lights
-- [ ] Coordinate with Mróz on the light struct layout and uniform names
+## NED-01 (P0) Splajny (~5h) - tydzień 1
 
-**Acceptance criteria:**
-- Scene correctly lit by directional sun + Mróz's moving point lights + spotlight
-- Point lights have visible falloff with distance
-- Spotlight has visible cone (inner/outer cutoff)
+Klasa splajnu Catmull-Rom do gładkich ścieżek w 3D.
 
-**Dependencies:** `OLE-01`, `MRZ-05` (light system)
+- [ ] `src/Spline.h` / `.cpp`
+- [ ] `addControlPoint(glm::vec3)`, `evaluate(float t)`, `evaluateTangent(float t)`
+- [ ] interpolacja Catmull-Rom między punktami
+- [ ] ścieżki zapętlone (ostatni punkt łączy się z pierwszym)
+- [ ] test: render splajnu jako linii, żeby sprawdzić gładkość
 
----
+Gotowe gdy: ścieżka z 5+ punktami daje gładką, ciągłą krzywą, `evaluate(0)` = pierwszy punkt,
+tangenty gładkie i niezerowe.
 
-### `OLE-06` 🟡 P2 · Shadow Artifact Debugging & Polish (~3h)
-**Week 3**
+Bez zależności, można od razu.
+Materiały: [Catmull-Rom](https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline).
 
-Fix common shadow mapping issues.
+## NED-02 (P0) Parallel Transport Frames (~5h) - tydzień 1 - METODA OBOWIĄZKOWA M5
 
-**What to do:**
-- [ ] Fix peter-panning (shadow detaches from object) — adjust bias
-- [ ] Fix shadow map coverage (objects outside light frustum have no shadows) — adjust ortho size
-- [ ] Optional: implement front-face culling during shadow pass to reduce acne
-- [ ] Optional: add a second shadow map for the spotlight (Mróz's headlamp)
+Stabilne ramki orientacji wzdłuż splajnu (bez skręcania) do orientacji ryb.
 
-**Acceptance criteria:**
-- Shadows are artifact-free from all common camera angles
-- No light leaking through solid objects
+- [ ] PTF w `Spline.cpp` (albo osobny moduł)
+- [ ] próbkowanie splajnu w N punktach, tangent w każdym
+- [ ] ramka startowa: dowolna normalna prostopadła do pierwszego tangentu
+- [ ] dla kolejnych punktów: obrót poprzedniej normalnej do nowego tangentu (cross + kąt)
+- [ ] zapis ramek jako `(T, N, B)` albo `glm::mat4` na próbkę
+- [ ] metoda `getFrame(float t)` → pozycja, tangent, normalna, bitangent
 
-**Dependencies:** `OLE-04`
+Gotowe gdy: obiekt na splajnie trzyma stabilną orientację (bez losowego obracania/skręcania),
+działa na krzywych o różnej krzywiźnie i na prostych odcinkach. Test: małe osie/box na każdej ramce.
 
----
+Zależy od: NED-01.
+Materiały: [Parallel Transport (giordi91)](https://giordi91.github.io/post/2018-31-07-parallel-transport/).
 
-### `OLE-07` 🟢 P3 · Post-Processing — Underwater Color Grading (~3h)
-**Week 3–4**
+## NED-03 (P1) Pływanie ryb - vertex shader (~7h) - tydzień 2 - TO JEST METODA A10 (30 pkt)
 
-Optional post-processing pass for underwater atmosphere.
+Falowanie ciała ryby przez sinusoidę w vertex shaderze.
 
-**What to do:**
-- [ ] Render scene to an intermediate FBO (color + depth)
-- [ ] Apply a fullscreen quad shader with blue-green tint
-- [ ] Add depth-based fog (exponential, blue-green color) in post or in the PBR shader
-- [ ] Optional: slight chromatic aberration or lens distortion at edges
+- [ ] `shaders/fish.vert` - bazuje na vertex shaderze PBR + deformacja
+- [ ] `shaders/fish.frag` - jak `pbr.frag` (albo wspólny kod oświetlenia)
+- [ ] fala ciała: `deformed.x += sin(z * freq - time * speed) * amplitude * bodyFactor`
+- [ ] `bodyFactor = smoothstep(0, 1, z / fishLength)` - fala rośnie ku ogonowi
+- [ ] animacja płetw: osobna sinusoida
+- [ ] uniformy: `time`, `waveAmplitude`, `waveFrequency`, `waveSpeed`, `fishLength`
+- [ ] przeliczenie normalnych po deformacji (różnice skończone albo analitycznie)
 
-**Acceptance criteria:**
-- Scene feels more underwater with color shift and distance fog
-- Parameters are easily tweakable
+Gotowe gdy: ciało ryby faluje jak przy pływaniu, głowa stabilna a ogon macha najmocniej, płetwy
+ruszają się niezależnie, parametry da się zmieniać uniformami, oświetlenie poprawne na zdeformowanej
+powierzchni (zaktualizowane normalne).
 
-**Dependencies:** All core rendering tasks done
+Zależy od: OLE-01 (na nim bazuje shader ryby).
+Materiały: [GPU Gems - Animation in the Dawn Demo](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-4-animation-dawn-demo).
 
----
+## NED-04 (P1) Ryby jadące po splajnie z PTF (~4h) - tydzień 2
 
-# 👤 Nędzyński — Animation, Physics & Environment
+- [ ] `src/FishAnimation.h` / `.cpp`
+- [ ] animacja parametru `t` po splajnie w czasie (stała prędkość albo wygładzona)
+- [ ] w każdej klatce: pozycja + ramka z PTF → macierz modelu
+- [ ] macierz modelu: kolumny = (B, N, -T) z ramki + pozycja
+- [ ] połączenie orientacji z PTF z deformacją pływania z vertex shadera
+- [ ] kilka ryb na różnych ścieżkach (albo ta sama ścieżka z przesunięciem w czasie)
 
-> **Focus:** Fish animation (A10) + Parallel Transport Frames + Skybox + Jellyfish
-> **Mandatory methods:** M5 (Parallel Transport Frames), M6 (Underwater Skybox/Cubemap)
-> **Chosen method:** A10 — Skeletal/swimming animation (30 pts)
-> **Estimated effort:** ~31 hours
+Gotowe gdy: ryba płynnie jedzie po ścieżce, zawsze patrzy do przodu wzdłuż krzywej (bez przeskoków),
+animacja pływania gra na wierzchu, min. 2 ryby na różnych ścieżkach.
 
----
+Zależy od: NED-01, NED-02, NED-03.
 
-### `NED-01` 🔴 P0 · Spline Path System (~5h)
-**Week 1**
+## NED-05 (P1) Podwodny skybox / cubemapa (~4h) - tydzień 1 - METODA OBOWIĄZKOWA M6
 
-Implement a Catmull-Rom spline class for defining smooth paths in 3D.
+- [ ] 6 tekstur ścian cubemapy (głębokie niebiesko-zielone)
+- [ ] wczytanie przez `GL_TEXTURE_CUBE_MAP` (6 ścian)
+- [ ] `shaders/skybox.vert` + `.frag`
+- [ ] vertex shader: ucięcie translacji z view (`mat4(mat3(view))`), trik `pos.xyww`
+- [ ] fragment: próbka cubemapy wektorem kierunku
+- [ ] render z `GL_LEQUAL` i wyłączonym zapisem głębi
+- [ ] skybox nie rusza się z kamerą (tylko się obraca)
 
-**What to do:**
-- [ ] Create `src/Spline.h` / `src/Spline.cpp`
-- [ ] Implement `addControlPoint(glm::vec3)`, `evaluate(float t)`, `evaluateTangent(float t)`
-- [ ] Use the Catmull-Rom formula for interpolation between control points
-- [ ] Handle looping paths (connect last point back to first)
-- [ ] Test: render the spline as a line strip to verify smoothness
+Gotowe gdy: tło wygląda jak podwodne środowisko we wszystkie strony, skybox stoi przy ruchu kamery
+(tylko się obraca), góra jaśniejsza (słońce), dół ciemniejszy (głębia).
 
-**Acceptance criteria:**
-- A path with 5+ control points produces a smooth, continuous curve
-- `evaluate(0.0)` = first point, `evaluate(1.0)` = last point (or loop back)
-- Tangent vectors are smooth and non-zero
+Zależy od: MRZ-01. (Częściowo już jest w szkielecie.)
+Materiały: [LearnOpenGL Cubemaps](https://learnopengl.com/Advanced-OpenGL/Cubemaps).
 
-**Dependencies:** None — can start immediately
+## NED-06 (P2) Pulsujące meduzy (~3h) - tydzień 3
 
-**Resources:**
-- [Catmull-Rom splines](https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline)
+- [ ] deformacja pulsowania w vertex shaderze (skalowanie dzwonu sinusem)
+- [ ] można użyć shadera ryby z innymi parametrami albo osobnego
+- [ ] synchronizacja pulsowania z ruchem do góry (puls = napęd)
+- [ ] lekkie ruchy czułek (sinus na dolnych wierzchołkach)
 
----
+Gotowe gdy: meduza widocznie pulsuje dzwonem, ruch wygląda organicznie, czułki się kołyszą.
+Zależy od: NED-03.
 
-### `NED-02` 🔴 P0 · Parallel Transport Frames (~5h)
-**Week 1** | **⭐ MANDATORY METHOD M5**
+## NED-07 (P3) Więcej gatunków ryb (~3h) - tydzień 3-4
 
-Compute twist-free orientation frames along the spline for fish orientation.
+- [ ] 2-3 "profile" ryb z różną amplitudą/częstotliwością/prędkością/rozmiarem
+- [ ] różne modele albo przeskalowane wersje tego samego
+- [ ] różne ścieżki i prędkości
 
-**What to do:**
-- [ ] Implement PTF computation in `Spline.cpp` (or separate module)
-- [ ] Sample spline at N points, compute tangent at each point
-- [ ] Set initial frame: pick an arbitrary normal perpendicular to the first tangent
-- [ ] For each subsequent point: rotate previous normal to align with new tangent using cross product + angle method
-- [ ] Store frames as `(T, N, B)` triples or `glm::mat4` per sample
-- [ ] Provide a method: `getFrame(float t) → (position, tangent, normal, bitangent)`
-
-**Acceptance criteria:**
-- An object following the spline maintains stable orientation (no random flipping or twisting)
-- Works correctly on curves with varying curvature including straight sections
-- Visually test by rendering small axes or a box at each frame
-
-**Dependencies:** `NED-01`
-
-**Resources:**
-- [giordi91 — Parallel Transport](https://giordi91.github.io/post/2018-31-07-parallel-transport/)
+Gotowe gdy: min. 2 wyraźnie różne typy ryb pływają w scenie, każdy inaczej.
+Zależy od: NED-03, NED-04.
 
 ---
 
-### `NED-03` 🟠 P1 · Fish Swimming Animation — Vertex Shader (~7h)
-**Week 2** | **⭐ THIS IS THE A10 METHOD (30 pts)**
+# Mróz - scena, kamera, światła
 
-Implement sine-wave body undulation in the vertex shader.
+Setup + kamera na kwaternionach + światła (B13) + bąbelki + scena + interakcje. ~32h.
 
-**What to do:**
-- [ ] Create `shaders/fish.vert` — copy PBR vertex shader as base, add deformation
-- [ ] Create `shaders/fish.frag` — same as `pbr.frag` (or import shared lighting code)
-- [ ] Implement body wave: `deformed.x += sin(z * freq - time * speed) * amplitude * bodyFactor`
-- [ ] `bodyFactor` = `smoothstep(0, 1, z / fishLength)` — wave increases toward tail
-- [ ] Add fin animation: separate sine function for pectoral/dorsal fins
-- [ ] Add uniforms: `time`, `waveAmplitude`, `waveFrequency`, `waveSpeed`, `fishLength`
-- [ ] Recalculate normals after deformation (finite differences or analytical)
+## MRZ-01 (DONE) Setup projektu i okno (~4h) - tydzień 1
 
-**Acceptance criteria:**
-- Fish body visibly undulates like a swimming fish
-- Head is relatively stable, tail swings the most
-- Fins flap independently from the body
-- Animation parameters are adjustable via uniforms
-- Lighting is correct on the deformed surface (normals updated)
+Projekt postawiony z frameworka z zajęć (cw 7) jako samodzielny projekt **Visual Studio** w
+`UnderwaterScene/`, z dołączonymi bibliotekami.
 
-**Dependencies:** `OLE-01` (PBR shader to base the fish shader on)
+- [x] solucja VS `UnderwaterScene.sln` / `.vcxproj` (Win32, toolset v145) z GLFW, GLEW, GLM, Assimp, SOIL, ImGui
+- [x] `src/main.cpp` - okno GLFW, kontekst OpenGL 4.1 core, init GLEW, pętla główna
+- [x] `src/scene_underwater.hpp` - szkielet sceny (kamera, skybox, pętla rysowania)
+- [x] wczytywanie shaderów przez Core `Shader_Loader` (osobny `Shader.h` niepotrzebny)
+- [x] `.gitignore` + `.gitattributes`
+- [x] `CMakeLists.txt` pod Maca/Linuksa (opcjonalny, nie testowany - robimy na Windows/VS)
+- [x] kompiluje się i odpala: okno wstaje, w konsoli `OpenGL 4.1.0`
 
-**Resources:**
-- [GPU Gems 1 — Animation in the Dawn Demo](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-4-animation-dawn-demo)
+Gotowe. Reszta buduje na tym. Instrukcja: `UnderwaterScene/BUILD.md`.
 
----
+## MRZ-02 (P0) Kamera na kwaternionach (~5h) - tydzień 1 - METODA OBOWIĄZKOWA M3
 
-### `NED-04` 🟠 P1 · Fish Path Following with PTF (~4h)
-**Week 2**
+- [ ] `src/Camera.h` / `.cpp`
+- [ ] orientacja jako `glm::quat`, pozycja jako `glm::vec3`
+- [ ] mysz → kwaterniony pitch/yaw → złożenie z aktualną orientacją
+- [ ] wektory forward/right/up z macierzy obrotu kwaternionu
+- [ ] view: `glm::lookAt(position, position + forward, up)`
+- [ ] ruch WSAD wzdłuż lokalnych osi
+- [ ] Spacja / LShift góra-dół
+- [ ] opcjonalnie Q/E przechył, lekkie kołysanie
 
-Move the animated fish along the spline using Parallel Transport Frames.
+Gotowe gdy: kamera obraca się gładko we wszystkie strony bez gimbal locka (patrzenie w górę i obrót
+w bok nie powoduje przeskoku), ruch jak pływanie (płynny, 6DOF).
 
-**What to do:**
-- [ ] Create `src/FishAnimation.h` / `src/FishAnimation.cpp`
-- [ ] Animate the `t` parameter along the spline over time (constant speed or eased)
-- [ ] At each frame: get position + frame from PTF, build model matrix
-- [ ] Model matrix: columns = (B, N, -T) from the frame + position for translation
-- [ ] Combine PTF orientation with vertex-shader swimming deformation
-- [ ] Support multiple fish on different paths (or same path with time offset)
+Zależy od: MRZ-01.
+Materiały: [opengl-tutorial Quaternions](https://www.opengl-tutorial.org/intermediate-tutorials/tutorial-17-quaternions/).
 
-**Acceptance criteria:**
-- Fish smoothly follows the spline path
-- Fish faces forward along the curve at all times (no snapping or flipping)
-- Swimming animation plays on top of the path movement
-- At least 2 fish visible on different paths
+## MRZ-03 (P0) Wczytywanie modeli (~6h) - tydzień 1
 
-**Dependencies:** `NED-01`, `NED-02`, `NED-03`
+- [ ] `src/Model.h` / `.cpp` - wczytanie modelu przez Assimp
+- [ ] `src/Mesh.h` / `.cpp` - opakowanie VAO/VBO/EBO
+- [ ] wyciąganie wierzchołków (pozycja, normalna, texCoords, tangent, bitangent) i indeksów
+- [ ] wczytanie tekstur z materiałów modelu
+- [ ] `src/Texture.h` / `.cpp` - wczytywanie obrazków przez SOIL, jednostki teksturujące
+- [ ] test: wczytanie i render prostego .obj z teksturą
 
----
+(Uwaga: część tego, Texture i RenderContext, jest już w klasach Core ze szkieletu - można rozbudować.)
 
-### `NED-05` 🟠 P1 · Underwater Skybox / Cubemap (~4h)
-**Week 1** | **⭐ MANDATORY METHOD M6**
+Gotowe gdy: testowy model się wyświetla z teksturą, tangent/bitangent dostępne dla normal mappingu Olejnika.
+Zależy od: MRZ-01, MRZ-02.
 
-Render a cubemap skybox as the underwater background.
+## MRZ-04 (P1) Scena i rozmieszczenie obiektów (~4h) - tydzień 2-3
 
-**What to do:**
-- [ ] Find or create 6 underwater cubemap face textures (deep blue-green tones)
-- [ ] Load the cubemap using `GL_TEXTURE_CUBE_MAP` with all 6 faces
-- [ ] Create `shaders/skybox.vert` + `shaders/skybox.frag`
-- [ ] Vertex shader: strip translation from view matrix (`mat4(mat3(view))`), use `pos.xyww` depth trick
-- [ ] Fragment shader: sample cubemap with direction vector
-- [ ] Render with `GL_LEQUAL` depth func and depth write disabled
-- [ ] Ensure skybox doesn't move with camera (only rotates)
+- [ ] `src/Scene.h` / `.cpp`
+- [ ] lista obiektów: model, pozycja, rotacja, skala
+- [ ] `Scene::render(Shader&)` - iteracja, ustawienie macierzy modelu, rysowanie
+- [ ] osobne wywołania dla przebiegu cieni i głównego
+- [ ] rozmieszczenie: dno (płaszczyzna/heightmapa), koralowiec (3-5 modeli), wrak (duży, rzuca cień), nurek
+- [ ] sensowna skala względem siebie (ryby małe, wrak duży)
 
-**Acceptance criteria:**
-- Background shows a convincing underwater environment in all directions
-- Skybox stays fixed when camera translates (only rotates)
-- Top face is brighter (sunlight), bottom face is darker (abyss)
+Gotowe gdy: scena ma rozpoznawalną podwodną kompozycję, obiekty w sensownej skali, przebieg cieni
+może użyć tego samego rysowania z innym shaderem.
 
-**Dependencies:** `MRZ-01` (window/context)
+Zależy od: MRZ-03 i znalezionych modeli (ALL-01).
 
-**Resources:**
-- [LearnOpenGL — Cubemaps](https://learnopengl.com/Advanced-OpenGL/Cubemaps)
+## MRZ-05 (P1) Ruchome światła i latarka - B13 (~5h) - tydzień 2 - TO JEST METODA B13 (15 pkt)
 
----
+- [ ] `src/Light.h` / `.cpp`
+- [ ] struktury `DirLight`, `PointLight`, `SpotLight` (zgodne z uniformami shadera)
+- [ ] latarka nurka (reflektor): przyczepiona do kamery (pozycja + kierunek), F włącza/wyłącza,
+      C zmienia kolor (biały → ciepły → chłodny niebieski), +/- albo scroll zmienia jasność
+- [ ] światła bioluminescencji (2-4): pozycja dryfuje `sin(time)`, jasność pulsuje
+      `sin(time * pulseSpeed)`, kolory miękkie niebieski/zielony/fioletowy, B włącza/wyłącza
+- [ ] wysyłanie danych świateł do shadera co klatkę
 
-### `NED-06` 🟡 P2 · Jellyfish Pulsing Animation (~3h)
-**Week 3**
+Gotowe gdy: latarka oświetla obiekty widocznym stożkiem jadącym za kamerą, włączanie/wyłączanie
+widoczne, bioluminescencja świeci i pulsuje rzucając kolorowe światło, min. jedno światło zawsze
+się rusza/pulsuje.
 
-Vertex-shader pulsing for jellyfish models.
+Zależy od: MRZ-02, OLE-05.
+Materiały: [LearnOpenGL Light Casters](https://learnopengl.com/Lighting/Light-casters).
 
-**What to do:**
-- [ ] Add a pulsing deformation in the vertex shader (scale bell up/down with sine wave)
-- [ ] Can reuse the fish shader with different parameters, or create a separate shader
-- [ ] Sync pulsing with upward movement (pulse = propulsion)
-- [ ] Add slight tentacle trailing motion (sine wave on lower vertices, like fish body but vertical)
+## MRZ-06 (P1) Interakcje (~3h) - tydzień 3 - MIN. 3 WYMAGANE
 
-**Acceptance criteria:**
-- Jellyfish visibly pulsates its bell
-- Movement looks organic and rhythmic
-- Tentacles trail and sway
+- [ ] latarka on/off (F) - część MRZ-05
+- [ ] zmiana koloru latarki (C) - część MRZ-05
+- [ ] jasność latarki (+/- albo scroll) - część MRZ-05
+- [ ] straszenie ryb (E albo lewy klik): znajdź ryby w promieniu od kamery, przyspiesz ich animację
+      (waveSpeed), odsuń od kamery, po kilku sekundach reset
+- [ ] bioluminescencja on/off (B) - część MRZ-05
+- [ ] rejestracja callbacków klawiszy w GLFW
+- [ ] spisanie sterowania do README
 
-**Dependencies:** `NED-03` (reuse vertex deformation approach)
+Gotowe gdy: min. 3 interakcje da się pokazać, każda daje widoczny efekt od razu, sterowanie intuicyjne.
+Zależy od: MRZ-05, NED-04 (do straszenia ryb).
 
----
+## MRZ-07 (P2) Bąbelki - system cząstek (~5h) - tydzień 3
 
-### `NED-07` 🟢 P3 · Multiple Fish Species (~3h)
-**Week 3–4**
+- [ ] `src/ParticleSystem.h` / `.cpp`
+- [ ] cząstka: pozycja, prędkość, czas życia, rozmiar, alpha
+- [ ] spawn z emiterów (dno, nurek, wrak)
+- [ ] update: w górę z lekkim dryfem na boki
+- [ ] render jako billboardy (zawsze do kamery) z alpha blendingiem
+- [ ] recykling martwych cząstek
+- [ ] `shaders/particle.vert` + `.frag`
 
-Create visual variety with different animation parameters.
+Gotowe gdy: bąbelki wznoszą się z lekkim chwianiem, znikają u góry / po czasie życia, brak ostrych
+krawędzi przy przecinaniu geometrii, min. 50-100 bąbelków naraz.
 
-**What to do:**
-- [ ] Define 2–3 fish "profiles" with different wave amplitude, frequency, speed, and size
-- [ ] Use different models or scaled versions of the same model
-- [ ] Give each species different spline paths and speeds
+Zależy od: MRZ-02.
 
-**Acceptance criteria:**
-- At least 2 visually distinct fish types swimming in the scene
-- Different species have noticeably different swimming styles
+## MRZ-08 (P2) Sklejenie całości + README (~5h) - tydzień 3-4
 
-**Dependencies:** `NED-03`, `NED-04`
+- [ ] kolejność w pętli: czas/deltaTime → input → animacje → przebieg cieni → przebieg główny
+      (skybox, scena, ryby, cząstki) → ewentualny post-processing → swap buffers
+- [ ] wszystkie uniformy co klatkę (kamera, światła, mapa cieni, czas)
+- [ ] obsługa resize okna (aktualizacja projekcji)
+- [ ] README: sterowanie, metody, instrukcja, screeny
+- [ ] wypchnięcie finalnej wersji na GitHub
 
----
+Gotowe gdy: wszystko działa razem bez wywałek, stabilne 30+ FPS, brak problemów z kolejnością
+renderowania (skybox za wszystkim, przezroczyste na końcu), README pozwala komuś nowemu zbudować i odpalić.
 
-# 👤 Mróz — Scene Composition, Camera & Lights
-
-> **Focus:** Project setup + quaternion camera + moving lights (B13) + particles + scene + interactions
-> **Mandatory methods:** M3 (Quaternion camera control)
-> **Chosen method:** B13 — Moving point lights (15 pts)
-> **Estimated effort:** ~32 hours
-
----
-
-### `MRZ-01` ✅ P0 · Project Setup & Window Init (~4h) — **DONE**
-**Week 1**
-
-Set up the project from the course lab framework (`cw 7`: GLEW + SOIL + Core/Render_Utils/Shader_Loader/Texture/Camera) as a self-contained **Visual Studio** project under `UnderwaterScene/`, with the dependencies bundled.
-
-**What was done:**
-- [x] Visual Studio solution `UnderwaterScene.sln` / `.vcxproj` (Win32, toolset v145) with GLFW, GLEW, GLM, Assimp, SOIL, ImGui wired up
-- [x] `src/main.cpp` — GLFW window, **OpenGL 4.1 core** context, GLEW init, main loop
-- [x] `src/scene_underwater.hpp` — starter scene (free-fly camera, skybox, draw loop)
-- [x] Shader loading via the Core `Shader_Loader` (no separate `Shader.h` needed)
-- [x] `.gitignore` + `.gitattributes` (build dirs, heavy deps, line-ending normalization)
-- [x] `CMakeLists.txt` for macOS/Linux (optional, untested — team is on Windows/VS)
-- [x] Builds and runs (verified): window opens, console prints `OpenGL 4.1.0`
-
-**Acceptance criteria:**
-- [x] Building in Visual Studio (`Debug | x86`, F5) produces a running executable
-- [x] Window opens with a cleared underwater color
-- [x] Shader loading utility works (`underwater` + `skybox` programs compile and render)
-
-**Dependencies:** None — **done first.** Everyone else builds on top of this. See `UnderwaterScene/BUILD.md`.
+Zależy od: wszystkich zadań P0 i P1.
 
 ---
 
-### `MRZ-02` 🔴 P0 · Quaternion Camera (~5h)
-**Week 1** | **⭐ MANDATORY METHOD M3**
+# Zadania wspólne
 
-Implement quaternion-based camera with underwater swim controls.
+## ALL-01 (P1) Znalezienie i przygotowanie modeli 3D (~2h każdy) - tydzień 1
 
-**What to do:**
-- [ ] Create `src/Camera.h` / `src/Camera.cpp`
-- [ ] Store orientation as `glm::quat`, position as `glm::vec3`
-- [ ] Mouse input → create pitch/yaw quaternions → compose with current orientation
-- [ ] Extract forward/right/up vectors from quaternion rotation matrix
-- [ ] Build view matrix: `glm::lookAt(position, position + forward, up)`
-- [ ] WASD movement along local forward/right axes
-- [ ] Space / LShift for ascend / descend
-- [ ] Optional: Q/E for roll, slight camera sway
+- [ ] ryby (1-2 gatunki) - .obj/.fbx z czystym UV
+- [ ] wrak - duży model, zamknięta geometria (na cienie)
+- [ ] korale (3-5 sztuk) - małe ozdobne modele
+- [ ] dno - płaszczyzna albo prosty mesh
+- [ ] nurek (opcjonalnie)
+- [ ] meduza - model z osobnym dzwonem + czułkami
+- [ ] sprawdzić, że wszystko ładuje się przez Assimp bez błędów
+- [ ] poukładać w `models/`
 
-**Acceptance criteria:**
-- Camera rotates smoothly in all directions without gimbal lock
-- Looking straight up then rotating sideways doesn't cause snapping (proves no gimbal lock)
-- Movement feels like underwater swimming (smooth, 6DOF)
+Gdzie szukać: [Sketchfab](https://sketchfab.com) (filtr: free, downloadable),
+[TurboSquid](https://www.turbosquid.com/Search/3D-Models/free/underwater), [Free3D](https://free3d.com).
 
-**Dependencies:** `MRZ-01`
+## ALL-02 (P1) Znalezienie i przygotowanie tekstur (~2h każdy) - tydzień 1-2
 
-**Resources:**
-- [opengl-tutorial.org — Quaternions](https://www.opengl-tutorial.org/intermediate-tutorials/tutorial-17-quaternions/)
+- [ ] zestawy PBR (albedo + normal + metallic + roughness + AO): piasek, zardzewiały metal, koral/skała
+- [ ] 6 ścian cubemapy na podwodny skybox
+- [ ] tekstura bąbelka (mała, okrągła, półprzezroczysta)
+- [ ] poukładać w `textures/`
 
----
+Gdzie: [ambientCG](https://ambientcg.com) (CC0), [Poly Haven](https://polyhaven.com).
 
-### `MRZ-03` 🔴 P0 · Model Loading (~6h)
-**Week 1**
+## ALL-03 (P2) Przegląd kodu i bugi (~3h każdy) - tydzień 3-4
 
-Load OBJ/glTF models with Assimp and render them.
+- [ ] przejrzeć nawzajem kod pod kątem poprawności i spójności
+- [ ] naprawić bugi z łączenia (nazwy uniformów, kolejność macierzy itd.)
+- [ ] optymalizacja jak FPS spada poniżej 30
 
-**What to do:**
-- [ ] Create `src/Model.h` / `src/Model.cpp` — load model via Assimp
-- [ ] Create `src/Mesh.h` / `src/Mesh.cpp` — VAO/VBO/EBO wrapper
-- [ ] Extract vertices (position, normal, texCoords, tangent, bitangent) and indices
-- [ ] Load associated textures from model's material info
-- [ ] Create `src/Texture.h` / `src/Texture.cpp` — load images with SOIL (matching the course framework's `Core::LoadTexture`), manage texture units
-- [ ] Test: load and render a simple .obj model with texture
+## ALL-04 (P2) Szlif końcowy (~2h każdy) - tydzień 4
 
-**Acceptance criteria:**
-- A test model (e.g. a fish or cube) loads and displays correctly
-- Textures are applied and visible
-- Tangent/bitangent data is available for Olejnik's normal mapping
+- [ ] spójna paleta kolorów (niebiesko-zielono-turkusowe)
+- [ ] kompozycja sceny dobra z domyślnej pozycji kamery
+- [ ] wszystkie efekty widoczne i do pokazania w 5 minut
+- [ ] brak wywałek i glitchy podczas demo
 
-**Dependencies:** `MRZ-01`, `MRZ-02` (camera to see the model)
+## ALL-05 (P2) Przygotowanie demo i prezentacji (~2h każdy) - tydzień 4
 
----
+- [ ] scenariusz demo z czasami (max 5 min)
+- [ ] dobra pozycja startowa kamery
+- [ ] próba z całą grupą - każdy opowiada o swoich metodach
+- [ ] backupowe screeny/wideo na wypadek wywałki
+- [ ] zrobienie screenów do README
 
-### `MRZ-04` 🟠 P1 · Scene Graph & Object Placement (~4h)
-**Week 2–3**
-
-Manage all scene objects with transforms and a structured scene graph.
-
-**What to do:**
-- [ ] Create `src/Scene.h` / `src/Scene.cpp`
-- [ ] Store a list of scene objects with: model reference, position, rotation, scale
-- [ ] Implement `Scene::render(Shader&)` — iterate objects, set model matrix, draw
-- [ ] Support separate render calls for shadow pass vs. main pass
-- [ ] Place scene elements:
-  - [ ] Sandy seabed (flat plane or heightmap mesh)
-  - [ ] Coral reef (3–5 coral models placed in a group)
-  - [ ] Shipwreck (large model, shadow-casting)
-  - [ ] Diver model (near camera or as separate entity)
-- [ ] Ensure all models are at correct scale relative to each other
-
-**Acceptance criteria:**
-- Scene has a recognizable underwater composition when viewed from the camera
-- Objects are at appropriate scale (fish are small, wreck is large)
-- Shadow pass can reuse the scene's draw call with a different shader
-
-**Dependencies:** `MRZ-03`, needs some models found/downloaded (shared task)
+Gotowe gdy: demo poniżej 5 minut, wszystkie wymagane metody pokazane, każdy umie wytłumaczyć swoją część.
 
 ---
 
-### `MRZ-05` 🟠 P1 · Moving Point Lights & Headlamp — B13 (~5h)
-**Week 2** | **⭐ THIS IS THE B13 METHOD (15 pts)**
+# Podsumowanie godzin
 
-Implement the light management system with moving lights.
+Z grubsza (godziny):
 
-**What to do:**
-- [ ] Create `src/Light.h` / `src/Light.cpp`
-- [ ] Define structs: `DirLight`, `PointLight`, `SpotLight` (matching shader uniforms)
-- [ ] **Diver headlamp (spotlight):**
-  - [ ] Attach to camera position + forward direction
-  - [ ] Toggle on/off with `F` key
-  - [ ] Color cycle with `C` key (white → warm yellow → cool blue)
-  - [ ] Intensity adjust with `+`/`-` or mouse scroll
-- [ ] **Bioluminescent point lights (2–4):**
-  - [ ] Animated position: slow drift with `sin(time)` offsets
-  - [ ] Animated intensity: gentle pulsing with `sin(time * pulseSpeed)`
-  - [ ] Colors: soft blue, green, purple
-  - [ ] Toggle with `B` key
-- [ ] Upload all light data to shader each frame via uniforms
+- Olejnik: ~27h core + ~3h opcjonalne + ~11h wspólne = ~38-41h
+- Nędzyński: ~25h core + ~3h opcjonalne + ~11h wspólne = ~36-39h
+- Mróz: ~32h core + ~11h wspólne = ~43h
 
-**Acceptance criteria:**
-- Headlamp illuminates objects in a visible cone that follows the camera
-- Toggling headlamp on/off is clearly visible
-- Bioluminescent lights glow and pulse, casting colored light on nearby objects
-- At least one light is animated (moves or pulses) at all times
+Mróz ma trochę więcej, bo infrastruktura (setup, modele, integracja) to klej trzymający wszystko
+razem. Mniej kombinowania niż przy matmie shaderów czy animacji, ale równie potrzebne. Punktowo
+wychodzi po równo: Olejnik ~15 pkt w metodach obowiązkowych, Nędzyński ~10 pkt obowiązkowe + 30 pkt
+A10, Mróz ~5 pkt obowiązkowe + 15 pkt B13 + interakcje i spójność wizualna.
 
-**Dependencies:** `MRZ-02` (camera for headlamp attachment), `OLE-05` (shader multi-light support)
+## Plan tygodniowy
 
-**Resources:**
-- [LearnOpenGL — Light Casters](https://learnopengl.com/Lighting/Light-casters)
-
----
-
-### `MRZ-06` 🟠 P1 · Interactions (~3h)
-**Week 3** | **⭐ MINIMUM 3 REQUIRED**
-
-Implement user interactions beyond camera control.
-
-**What to do:**
-- [ ] **Interaction 1: Toggle headlamp** (`F` key) — already part of `MRZ-05`
-- [ ] **Interaction 2: Headlamp color cycle** (`C` key) — already part of `MRZ-05`
-- [ ] **Interaction 3: Headlamp intensity** (`+`/`-` or scroll) — already part of `MRZ-05`
-- [ ] **Interaction 4: Scare fish** (`E` or left click):
-  - [ ] On trigger: find fish within a radius of camera
-  - [ ] Increase their animation speed (waveSpeed uniform) temporarily
-  - [ ] Move them away from camera position
-  - [ ] Reset after a few seconds
-- [ ] **Interaction 5: Toggle bioluminescence** (`B` key) — already part of `MRZ-05`
-- [ ] Register all key callbacks in GLFW input handling
-- [ ] Document all controls for the README
-
-**Acceptance criteria:**
-- At least 3 interactions are clearly demonstrable
-- Each interaction has visible, immediate feedback in the scene
-- Controls are intuitive and documented
-
-**Dependencies:** `MRZ-05`, `NED-04` (for fish scare interaction)
-
----
-
-### `MRZ-07` 🟡 P2 · Bubble Particle System (~5h)
-**Week 3**
-
-CPU-side particle system for rising bubbles.
-
-**What to do:**
-- [ ] Create `src/ParticleSystem.h` / `src/ParticleSystem.cpp`
-- [ ] Each particle: position, velocity, lifetime, size, alpha
-- [ ] Spawn bubbles from defined emitter positions (seabed vents, diver, wreck)
-- [ ] Update: rise upward with slight random horizontal drift
-- [ ] Render as billboarded quads (always face camera) with alpha blending
-- [ ] Recycle dead particles (respawn when lifetime expires)
-- [ ] Create `shaders/particle.vert` + `shaders/particle.frag`
-
-**Acceptance criteria:**
-- Bubbles rise from the bottom with slight wobble
-- Bubbles fade out near the top or after lifetime
-- No harsh edges where bubbles clip geometry (soft alpha)
-- At least 50–100 bubbles active for visual impact
-
-**Dependencies:** `MRZ-02` (camera for billboarding)
-
----
-
-### `MRZ-08` 🟡 P2 · Main Loop Integration & README (~5h)
-**Week 3–4**
-
-Wire everything together in `main.cpp` and write the final README.
-
-**What to do:**
-- [ ] **Render loop order:**
-  1. Update time, deltaTime
-  2. Process input (camera + interactions)
-  3. Update animations (fish positions, light animation, particles)
-  4. Shadow pass (bind shadow FBO, render scene with depth shader)
-  5. Main pass (bind default FBO, render skybox, scene, fish, particles)
-  6. Optional post-processing
-  7. Swap buffers
-- [ ] Pass all necessary uniforms per frame (camera, lights, shadow map, time)
-- [ ] Handle window resize (update projection matrix)
-- [ ] **README.md** — controls, methods, build instructions, screenshots
-- [ ] Push final version to GitHub
-
-**Acceptance criteria:**
-- All systems work together in a single frame without crashes
-- Stable 30+ FPS
-- No visible rendering order issues (skybox behind everything, transparent objects last)
-- README allows a new person to build and run the project
-
-**Dependencies:** All P0 and P1 tasks from all members
-
----
-
-# 🤝 Shared Tasks
-
----
-
-### `ALL-01` 🟠 P1 · Find & Prepare 3D Models (~2h each)
-**Week 1** | **All members**
-
-**What to do:**
-- [ ] **Fish** (1–2 species) — .obj or .fbx with clean UVs
-- [ ] **Shipwreck** — large model, closed geometry (for shadows)
-- [ ] **Corals** (3–5 varieties) — small decorative models
-- [ ] **Seabed** — flat plane or simple mesh (will add normal map for detail)
-- [ ] **Diver** (optional) — simple figure model
-- [ ] **Jellyfish** — model with separate bell + tentacles (for animation)
-- [ ] Verify all models load with Assimp without errors
-- [ ] Organize in `models/` subdirectories
-
-**Sources:**
-- [Sketchfab](https://sketchfab.com) (filter: free, downloadable)
-- [TurboSquid](https://www.turbosquid.com/Search/3D-Models/free/underwater)
-- [Free3D](https://free3d.com)
-
----
-
-### `ALL-02` 🟠 P1 · Find & Prepare Textures (~2h each)
-**Week 1–2** | **All members**
-
-**What to do:**
-- [ ] **PBR texture sets** (albedo + normal + metallic + roughness + AO):
-  - [ ] Sand/ground
-  - [ ] Rusty metal (wreck)
-  - [ ] Coral/rock
-- [ ] **Cubemap faces** (6 images for underwater skybox)
-- [ ] **Bubble texture** (small, circular, semi-transparent)
-- [ ] Organize in `textures/` subdirectories
-
-**Sources:**
-- [ambientCG](https://ambientcg.com) — CC0 PBR sets
-- [Poly Haven](https://polyhaven.com) — textures + HDRI
-
----
-
-### `ALL-03` 🟡 P2 · Code Review & Bug Fixing (~3h each)
-**Week 3–4** | **All members**
-
-- [ ] Review each other's code for correctness and consistency
-- [ ] Fix integration bugs (shader uniform mismatches, wrong matrix order, etc.)
-- [ ] Performance optimization if FPS drops below 30
-
----
-
-### `ALL-04` 🟡 P2 · Final Polish (~2h each)
-**Week 4** | **All members**
-
-- [ ] Consistent color palette (blue/green/teal underwater tones)
-- [ ] Scene composition looks good from the default camera position
-- [ ] All effects are visible and demonstrable within 5 minutes
-- [ ] No crashes or visual glitches during demo flow
-
----
-
-### `ALL-05` 🟡 P2 · Demo Preparation & Presentation (~2h each)
-**Week 4** | **All members**
-
-**What to do:**
-- [ ] Write a demo script with timing (5 min max)
-- [ ] Set up a good starting camera position
-- [ ] Rehearse with all group members — each person presents their methods
-- [ ] Prepare backup screenshots/video in case of crash
-- [ ] Take screenshots for README
-
-**Acceptance criteria:**
-- Demo runs under 5 minutes
-- All required methods are visibly demonstrated
-- Each group member can explain their part
-
----
-
-# 📊 Summary
-
-## Effort Breakdown (estimated hours)
-
-| Task | Olejnik | Nędzyński | Mróz | Shared |
-|------|---------|-----------|------|--------|
-| PBR Basic | **6h** | | | |
-| PBR Textures | **4h** | | | |
-| Normal Mapping | **5h** | | | |
-| Shadow Mapping | **8h** | | | |
-| Multi-light Shader | **4h** | | | |
-| Shadow Polish | 3h | | | |
-| Post-processing | 3h | | | |
-| Spline Paths | | **5h** | | |
-| PTF | | **5h** | | |
-| Fish Animation A10 | | **7h** | | |
-| Fish + PTF | | **4h** | | |
-| Skybox/Cubemap | | **4h** | | |
-| Jellyfish | | 3h | | |
-| Multiple Species | | 3h | | |
-| Project Setup | | | **4h** | |
-| Quaternion Camera | | | **5h** | |
-| Model Loading | | | **6h** | |
-| Scene Graph | | | **4h** | |
-| Moving Lights B13 | | | **5h** | |
-| Interactions | | | **3h** | |
-| Bubble Particles | | | **5h** | |
-| Integration + README | | | **5h** | |
-| Find Models | | | | 2h each |
-| Find Textures | | | | 2h each |
-| Code Review | | | | 3h each |
-| Final Polish | | | | 2h each |
-| Demo Prep | | | | 2h each |
-| **Core total** | **27h** | **25h** | **32h** | |
-| **+ Optional (P3)** | +3h | +3h | — | |
-| **+ Shared** | +11h | +11h | +11h | |
-| **≈ Grand total** | **~38–41h** | **~36–39h** | **~43h** | |
-
-> [!NOTE]
-> Mróz has ~4h more than others in raw estimates because infrastructure tasks (setup, model loading, integration) are the glue that enables everything else. These tasks have lighter cognitive load than shader math or animation algorithms but are equally essential. The grading value is also balanced: Olejnik covers ~15 pts in mandatory methods, Nędzyński covers ~10 pts mandatory + 30 pts A10, and Mróz covers ~5 pts mandatory + 15 pts B13 + all interactions and visual coherence contributions.
-
-## By Week
-
-| Week | Olejnik | Nędzyński | Mróz | Shared |
-|------|---------|-----------|------|--------|
-| **1** | `OLE-01` PBR basic | `NED-01` Spline, `NED-02` PTF, `NED-05` Skybox | `MRZ-01` Setup, `MRZ-02` Camera, `MRZ-03` Models | `ALL-01` Models, `ALL-02` Textures |
-| **2** | `OLE-02` PBR tex, `OLE-03` Normal, `OLE-04` Shadows, `OLE-05` Multi-light | `NED-03` Fish anim, `NED-04` Fish+PTF | `MRZ-04` Scene, `MRZ-05` Lights B13 | |
-| **3** | `OLE-06` Shadow polish, `OLE-07` Post-proc | `NED-06` Jellyfish, `NED-07` Fish species | `MRZ-06` Interactions, `MRZ-07` Bubbles, `MRZ-08` Integration | `ALL-03` Code review |
-| **4** | Bug fixes | Bug fixes | `MRZ-08` README (finish) | `ALL-04` Polish, `ALL-05` Demo |
-
-## Task Count Per Person
-
-| Person | 🔴 P0 | 🟠 P1 | 🟡 P2 | 🟢 P3 | Total |
-|--------|-------|-------|-------|-------|-------|
-| **Olejnik** | 1 | 3 | 1 | 1 | **6 (+1 optional)** |
-| **Nędzyński** | 2 | 3 | 1 | 1 | **6 (+1 optional)** |
-| **Mróz** | 3 | 2 | 2 | 0 | **7 (+1 merged)** |
-| **Shared** | 0 | 2 | 3 | 0 | **5** |
+- **Tydzień 1**: OLE-01 / NED-01, NED-02, NED-05 / MRZ-01, MRZ-02, MRZ-03 / ALL-01, ALL-02
+- **Tydzień 2**: OLE-02, OLE-03, OLE-04, OLE-05 / NED-03, NED-04 / MRZ-04, MRZ-05
+- **Tydzień 3**: OLE-06, OLE-07 / NED-06, NED-07 / MRZ-06, MRZ-07, MRZ-08 / ALL-03
+- **Tydzień 4**: poprawki / ALL-04, ALL-05, dokończenie README
