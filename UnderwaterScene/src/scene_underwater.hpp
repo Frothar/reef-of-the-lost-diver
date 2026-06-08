@@ -337,12 +337,22 @@ inline void renderScene(GLFWwindow* window)
         float fishYaw[3]   = { 0.4f, -0.8f, 2.1f };
         float fishScale    = 1.6f; // jednolita skala
 
+        // Zywe, tropikalne kolory - zeby ryby odcinaly sie od koloru wody.
+        glm::vec3 fishColors[3] = {
+            glm::vec3(0.95f, 0.45f, 0.10f), // pomaranczowa (jak blazenek)
+            glm::vec3(0.95f, 0.80f, 0.18f), // zolta
+            glm::vec3(0.85f, 0.22f, 0.40f), // czerwono-rozowa
+        };
+
         for (int i = 0; i < 3; ++i)
         {
+            PBRMaterial mat = fishMaterial;
+            mat.albedo = fishColors[i];
+
             glm::mat4 m = glm::translate(fishPositions[i] + glm::vec3(0.0f, 0.15f * std::sin(time + fishPhase[i]), 0.0f))
                         * glm::rotate(fishYaw[i], glm::vec3(0.0f, 1.0f, 0.0f))
                         * glm::scale(glm::vec3(fishScale));
-            drawFish(fishMesh, m, fishMaterial, time, fishPhase[i]);
+            drawFish(fishMesh, m, mat, time, fishPhase[i]);
         }
     }
 
