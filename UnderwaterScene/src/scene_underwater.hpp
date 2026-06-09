@@ -93,6 +93,17 @@ struct FishParams
     float finAmplitude  = 0.08f; // amplituda ruchu pletw (piersiowe wystaja w X)
 };
 
+// NED-06: parametry pulsowania meduzy, wysylane do jellyfish.vert.
+struct JellyParams
+{
+    float pulseAmplitude    = 0.18f; // jak mocno pulsuje dzwon
+    float pulseSpeed        = 2.0f;  // czestotliwosc pulsu
+    float tentacleAmplitude = 0.10f; // jak mocno koysza sie czulki
+    float tentacleSpeed     = 1.6f;
+    float tentacleLength    = 0.95f; // zgodne z generatorem modelu
+    float bobAmplitude      = 0.25f; // pionowy ruch (puls = napped do gory)
+};
+
 namespace {
     Core::Shader_Loader shaderLoader;
 
@@ -100,12 +111,14 @@ namespace {
     GLuint programSkybox = 0;
     GLuint programDebugLine = 0; // NED-01 podglad splajnu
     GLuint programFish   = 0;    // NED-03 pływanie ryb (A10)
+    GLuint programJelly  = 0;    // NED-06 pulsujace meduzy
     GLuint programWaterOverlay = 0; // pelnoekranowy efekt wody
 
     Core::RenderContext sphereContext;
     Core::RenderContext cubeContext;
     Core::RenderContext groundContext; // re-uses the cube model, scaled flat
     Core::RenderContext fishContext;   // NED-03/ALL-01 model ryby (models/fish.obj)
+    Core::RenderContext jellyContext;  // NED-06 model meduzy (models/jellyfish.obj)
 
     GLuint skyboxVAO = 0, skyboxVBO = 0;
     GLuint skyboxCubemap = 0;
@@ -163,6 +176,11 @@ namespace {
     // NED-04: instancje ryb jadacych po splajnach (+ kolory rownolegle)
     std::vector<FishAnimation> fishes;
     std::vector<glm::vec3>     fishColors;
+
+    // NED-06: meduzy (pulsowanie)
+    JellyParams jellyParams;
+    PBRMaterial jellyMaterial = { glm::vec3(0.55f, 0.45f, 0.85f), 0.0f, 0.30f }; // fioletowo-niebieska, gladka
+    bool        showJelly = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +312,40 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
     glUniform1f(glGetUniformLocation(programFish, "waveSpeed"),     fishParams.waveSpeed);
     glUniform1f(glGetUniformLocation(programFish, "fishLength"),    fishParams.fishLength);
     glUniform1f(glGetUniformLocation(programFish, "finAmplitude"),  fishParams.finAmplitude);
+
+    Core::DrawContext(context);
+    glUseProgram(0);
+}
+
+// NED-06: rysuje pulsujaca meduze (deformacja w jellyfish.vert).
+// phaseOffset desynchronizuje puls miedzy meduzami.
+inline void drawJellyfish(Core::RenderContext& context, glm::mat4 modelMatrix,
+                          const PBRMaterial& material, float time, float phaseOffset)
+{
+    glUseProgram(programJelly);
+
+    glm::mat4 view = createCameraMatrix();
+    glm::mat4 projection = createPerspectiveMatrix();
+
+    glUniformMatrix4fv(glGetUniformLocation(programJelly, "model"),      1, GL_FALSE, (float*)&modelMatrix);
+    glUniformMatrix4fv(glGetUniformLocation(programJelly, "view"),       1, GL_FALSE, (float*)&view);
+    glUniformMatrix4fv(glGetUniformLocation(programJelly, "projection"), 1, GL_FALSE, (float*)&projection);
+
+    glUniform3fv(glGetUniformLocation(programJelly, "cameraPos"),  1, (float*)&camera.position);
+    glUniform3fv(glGetUniformLocation(programJelly, "lightDir"),   1, (float*)&sunDir);
+    glUniform3fv(glGetUniformLocation(programJelly, "lightColor"), 1, (float*)&sunColor);
+
+    bindPBRMaterial(programJelly, material);
+
+    glUniform3fv(glGetUniformLocation(programJelly, "fogColor"),  1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programJelly, "fogDensity"), fogDensity);
+
+    glUniform1f(glGetUniformLocation(programJelly, "time"),              time + phaseOffset);
+    glUniform1f(glGetUniformLocation(programJelly, "pulseAmplitude"),    jellyParams.pulseAmplitude);
+    glUniform1f(glGetUniformLocation(programJelly, "pulseSpeed"),        jellyParams.pulseSpeed);
+    glUniform1f(glGetUniformLocation(programJelly, "tentacleAmplitude"), jellyParams.tentacleAmplitude);
+    glUniform1f(glGetUniformLocation(programJelly, "tentacleSpeed"),     jellyParams.tentacleSpeed);
+    glUniform1f(glGetUniformLocation(programJelly, "tentacleLength"),    jellyParams.tentacleLength);
 
     Core::DrawContext(context);
     glUseProgram(0);
@@ -469,6 +521,39 @@ inline void renderScene(GLFWwindow* window)
         }
     }
 
+    // --- Meduzy (NED-06): pulsujacy dzwon + kolyszace sie czulki ---
+    // Pionowy bob zsynchronizowany z pulsem (kontrakcja = napped do gory).
+    if (showJelly && jellyContext.vertexArray != 0)
+    {
+        glm::vec3 jellyBase[3] = {
+            glm::vec3(-4.5f, 0.5f, -2.0f),
+            glm::vec3( 2.5f, 1.0f,  3.5f),
+            glm::vec3( 5.0f, 0.0f, -3.5f),
+        };
+        float jellyPhase[3] = { 0.0f, 2.1f, 4.0f };
+        float jellyScale[3] = { 1.6f, 1.2f, 2.0f };
+
+        // Gorna powierzchnia dna ~ y=0 (testowa kula na nim siedzi). Czulki siegaja
+        // tentacleLength*scale ponizej srodka dzwonu - pilnujemy, by najnizszy punkt
+        // przy dolnej fazie bobu nie wszedl pod dno (niezaleznie od suwakow).
+        const float seabedTopY = 0.0f;
+        const float margin     = 0.15f;
+
+        for (int i = 0; i < 3; ++i)
+        {
+            float ph  = time * jellyParams.pulseSpeed + jellyPhase[i];
+            float bob = jellyParams.bobAmplitude * std::sin(ph); // synchron z pulsem
+
+            float tentacleReach = jellyParams.tentacleLength * jellyScale[i];
+            float minCenterY = seabedTopY + margin + tentacleReach + jellyParams.bobAmplitude;
+            float centerY = glm::max(jellyBase[i].y, minCenterY) + bob;
+
+            glm::mat4 m = glm::translate(glm::vec3(jellyBase[i].x, centerY, jellyBase[i].z))
+                        * glm::scale(glm::vec3(jellyScale[i]));
+            drawJellyfish(jellyContext, m, jellyMaterial, time, jellyPhase[i]);
+        }
+    }
+
     // Splajn (NED-01) - podglad sciezki dla ryb
     drawSpline();
 
@@ -593,6 +678,9 @@ inline void init(GLFWwindow* window)
     // NED-03: fish.vert deformuje, oswietlenie wspolne z pbr.frag (spojnosc z OLE-01)
     programFish = shaderLoader.CreateProgram(
         (char*)"shaders/fish.vert", (char*)"shaders/pbr.frag");
+    // NED-06: meduza - osobny vertex shader (pulsowanie), wspolny pbr.frag
+    programJelly = shaderLoader.CreateProgram(
+        (char*)"shaders/jellyfish.vert", (char*)"shaders/pbr.frag");
     programWaterOverlay = shaderLoader.CreateProgram(
         (char*)"shaders/water_overlay.vert", (char*)"shaders/water_overlay.frag");
 
@@ -604,6 +692,8 @@ inline void init(GLFWwindow* window)
         std::cout << "Brak models/cube.obj – dno nie bedzie widoczne" << std::endl;
     if (!loadModelToContext("./models/fish.obj", fishContext))
         std::cout << "Brak models/fish.obj – ryby beda uzywac kuli jako placeholdera" << std::endl;
+    if (!loadModelToContext("./models/jellyfish.obj", jellyContext))
+        std::cout << "Brak models/jellyfish.obj – meduzy nie beda widoczne" << std::endl;
 
     // OLE-02: mapy PBR (piasek na dno, zardzewialy metal na kostke)
     {
@@ -762,6 +852,7 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programSkybox);
     shaderLoader.DeleteProgram(programDebugLine);
     shaderLoader.DeleteProgram(programFish);
+    shaderLoader.DeleteProgram(programJelly);
     shaderLoader.DeleteProgram(programWaterOverlay);
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
@@ -809,6 +900,13 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::SliderFloat("Wave frequency", &fishParams.waveFrequency, 0.5f, 15.0f);
         ImGui::SliderFloat("Wave speed",     &fishParams.waveSpeed,     0.0f, 15.0f);
         ImGui::SliderFloat("Fin amplitude",  &fishParams.finAmplitude,  0.0f, 0.5f);
+        ImGui::Separator();
+        ImGui::Text("NED-06 Meduzy");
+        ImGui::Checkbox("Pokaz meduzy", &showJelly);
+        ImGui::SliderFloat("Puls amplituda", &jellyParams.pulseAmplitude,    0.0f, 0.5f);
+        ImGui::SliderFloat("Puls predkosc",  &jellyParams.pulseSpeed,        0.0f, 6.0f);
+        ImGui::SliderFloat("Czulki amplit.", &jellyParams.tentacleAmplitude, 0.0f, 0.3f);
+        ImGui::SliderFloat("Bob pionowy",    &jellyParams.bobAmplitude,      0.0f, 0.6f);
         ImGui::Separator();
         ImGui::Checkbox("Efekt wody (overlay)", &showWaterOverlay);
         ImGui::SliderFloat("Sila efektu wody", &waterOverlayStrength, 0.0f, 1.0f);

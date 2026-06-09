@@ -73,6 +73,7 @@
     <None Include="shaders\debug_line.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\debug_line.frag"><Filter>Shaders</Filter></None>
     <None Include="shaders\fish.vert"><Filter>Shaders</Filter></None>
+    <None Include="shaders\jellyfish.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\water_overlay.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\water_overlay.frag"><Filter>Shaders</Filter></None>
   </ItemGroup>
