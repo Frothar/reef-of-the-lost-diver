@@ -211,10 +211,10 @@ Materiały: [LearnOpenGL Cubemaps](https://learnopengl.com/Advanced-OpenGL/Cubem
 
 ## NED-06 (P2) Pulsujące meduzy (~3h) - tydzień 3
 
-- [ ] deformacja pulsowania w vertex shaderze (skalowanie dzwonu sinusem)
-- [ ] można użyć shadera ryby z innymi parametrami albo osobnego
-- [ ] synchronizacja pulsowania z ruchem do góry (puls = napęd)
-- [ ] lekkie ruchy czułek (sinus na dolnych wierzchołkach)
+- [x] deformacja pulsowania w vertex shaderze (skalowanie dzwonu sinusem)
+- [x] można użyć shadera ryby z innymi parametrami albo osobnego
+- [x] synchronizacja pulsowania z ruchem do góry (puls = napęd)
+- [x] lekkie ruchy czułek (sinus na dolnych wierzchołkach)
 
 Gotowe gdy: meduza widocznie pulsuje dzwonem, ruch wygląda organicznie, czułki się kołyszą.
 Zależy od: NED-03.
