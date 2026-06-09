@@ -181,12 +181,12 @@ Materiały: [GPU Gems - Animation in the Dawn Demo](https://developer.nvidia.com
 
 ## NED-04 (P1) Ryby jadące po splajnie z PTF (~4h) - tydzień 2
 
-- [ ] `src/FishAnimation.h` / `.cpp`
-- [ ] animacja parametru `t` po splajnie w czasie (stała prędkość albo wygładzona)
-- [ ] w każdej klatce: pozycja + ramka z PTF → macierz modelu
-- [ ] macierz modelu: kolumny = (B, N, -T) z ramki + pozycja
-- [ ] połączenie orientacji z PTF z deformacją pływania z vertex shadera
-- [ ] kilka ryb na różnych ścieżkach (albo ta sama ścieżka z przesunięciem w czasie)
+- [x] `src/FishAnimation.h` / `.cpp`
+- [x] animacja parametru `t` po splajnie w czasie (stała prędkość albo wygładzona)
+- [x] w każdej klatce: pozycja + ramka z PTF → macierz modelu
+- [x] macierz modelu: kolumny = (B, N, -T) z ramki + pozycja
+- [x] połączenie orientacji z PTF z deformacją pływania z vertex shadera
+- [x] kilka ryb na różnych ścieżkach (albo ta sama ścieżka z przesunięciem w czasie)
 
 Gotowe gdy: ryba płynnie jedzie po ścieżce, zawsze patrzy do przodu wzdłuż krzywej (bez przeskoków),
 animacja pływania gra na wierzchu, min. 2 ryby na różnych ścieżkach.
