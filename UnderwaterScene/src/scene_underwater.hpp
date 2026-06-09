@@ -29,6 +29,7 @@
 #include "Camera.h"               // Core::createPerspectiveMatrix
 #include "QuaternionCamera.h"     // MRZ-02 quaternion camera
 #include "Spline.h"               // NED-01 splajn Catmull-Rom
+#include "FishAnimation.h"        // NED-04 ryby po splajnie z PTF
 
 #include <vector>
 
@@ -110,10 +111,15 @@ namespace {
     GLuint skyboxCubemap = 0;
 
     // --- Splajn (NED-01) -----------------------------------------------------
-    Spline debugSpline;
+    Spline debugSpline;                 // sciezka A (ryby + podglad)
     GLuint splineVAO = 0, splineVBO = 0;
     int    splineVertexCount = 0;
     bool   showSpline = true;
+
+    // --- Druga sciezka dla ryb (NED-04) --------------------------------------
+    Spline fishSplineB;                 // sciezka B (druga grupa ryb)
+    GLuint splineBVAO = 0, splineBVBO = 0;
+    int    splineBVertexCount = 0;
 
     // --- PTF debug (NED-02) --------------------------------------------------
     // Kolorowe osie (T=czerwona, N=zielona, B=niebieska) w co ktorej ramce PTF.
@@ -153,6 +159,10 @@ namespace {
     FishParams  fishParams;
     PBRMaterial fishMaterial = { glm::vec3(0.30f, 0.55f, 0.75f), 0.1f, 0.45f }; // srebrzysto-niebieska
     bool        showFish = true;
+
+    // NED-04: instancje ryb jadacych po splajnach (+ kolory rownolegle)
+    std::vector<FishAnimation> fishes;
+    std::vector<glm::vec3>     fishColors;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,17 +302,28 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
 // Podglad splajnu jako linia (NED-01) - sluzy do wizualnej kontroli gladkosci.
 inline void drawSpline()
 {
-    if (!showSpline || splineVertexCount < 2) return;
+    if (!showSpline) return;
 
     glUseProgram(programDebugLine);
     glm::mat4 viewProjection = createPerspectiveMatrix() * createCameraMatrix();
-    glm::vec3 lineColor = glm::vec3(1.0f, 0.85f, 0.2f); // zolta linia, dobrze widoczna pod woda
-
     glUniformMatrix4fv(glGetUniformLocation(programDebugLine, "viewProjection"), 1, GL_FALSE, (float*)&viewProjection);
-    glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&lineColor);
 
-    glBindVertexArray(splineVAO);
-    glDrawArrays(GL_LINE_STRIP, 0, splineVertexCount);
+    // Sciezka A - zolta
+    if (splineVertexCount >= 2)
+    {
+        glm::vec3 colorA = glm::vec3(1.0f, 0.85f, 0.2f);
+        glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&colorA);
+        glBindVertexArray(splineVAO);
+        glDrawArrays(GL_LINE_STRIP, 0, splineVertexCount);
+    }
+    // Sciezka B (NED-04) - turkusowa
+    if (splineBVertexCount >= 2)
+    {
+        glm::vec3 colorB = glm::vec3(0.2f, 0.9f, 0.85f);
+        glUniform3fv(glGetUniformLocation(programDebugLine, "lineColor"), 1, (float*)&colorB);
+        glBindVertexArray(splineBVAO);
+        glDrawArrays(GL_LINE_STRIP, 0, splineBVertexCount);
+    }
     glBindVertexArray(0);
     glUseProgram(0);
 }
@@ -424,37 +445,27 @@ inline void renderScene(GLFWwindow* window)
     // --- Ryby (NED-03, A10): falowanie ciala w fish.vert ---
     // Placeholder ciala: sphere.obj rozciagnieta wzdluz Z (elipsoida ~ ryba).
     // Glowa przy -Z (stabilna), ogon przy +Z (macha). NED-04 wpusci je na splajn z PTF.
+    // NED-04: ryby jada po splajnach z orientacja PTF; na wierzchu animacja
+    // pływania z fish.vert (NED-03). deltaTime liczone lokalnie tutaj.
     if (showFish)
     {
-        // fish.obj ma juz proporcje ryby (glowa -Z, ogon +Z) - skalujemy JEDNOLICIE,
-        // zeby nie zniekształcić ksztaltu. Fallback na kule jesli model sie nie wczytal.
         Core::RenderContext& fishMesh = (fishContext.vertexArray != 0) ? fishContext : sphereContext;
 
-        glm::vec3 fishPositions[3] = {
-            glm::vec3(-3.0f, 1.6f,  1.0f),
-            glm::vec3( 0.5f, 2.2f, -1.5f),
-            glm::vec3( 3.5f, 0.9f,  2.0f),
-        };
-        float fishPhase[3] = { 0.0f, 1.7f, 3.4f };
-        float fishYaw[3]   = { 0.4f, -0.8f, 2.1f };
-        float fishScale    = 1.6f; // jednolita skala
+        static float fishLastTime = time;
+        float dt = time - fishLastTime;
+        fishLastTime = time;
+        if (dt < 0.0f) dt = 0.0f;          // zabezpieczenie
+        if (dt > 0.1f) dt = 0.1f;          // clamp przy zaciecu/debugu
 
-        // Zywe, tropikalne kolory - zeby ryby odcinaly sie od koloru wody.
-        glm::vec3 fishColors[3] = {
-            glm::vec3(0.95f, 0.45f, 0.10f), // pomaranczowa (jak blazenek)
-            glm::vec3(0.95f, 0.80f, 0.18f), // zolta
-            glm::vec3(0.85f, 0.22f, 0.40f), // czerwono-rozowa
-        };
-
-        for (int i = 0; i < 3; ++i)
+        for (size_t i = 0; i < fishes.size(); ++i)
         {
-            PBRMaterial mat = fishMaterial;
-            mat.albedo = fishColors[i];
+            fishes[i].update(dt);
 
-            glm::mat4 m = glm::translate(fishPositions[i] + glm::vec3(0.0f, 0.15f * std::sin(time + fishPhase[i]), 0.0f))
-                        * glm::rotate(fishYaw[i], glm::vec3(0.0f, 1.0f, 0.0f))
-                        * glm::scale(glm::vec3(fishScale));
-            drawFish(fishMesh, m, mat, time, fishPhase[i]);
+            PBRMaterial mat = fishMaterial;
+            mat.albedo = (i < fishColors.size()) ? fishColors[i] : fishMaterial.albedo;
+
+            // modelMatrix() z ramki PTF (orientacja wzdluz krzywej) + skala instancji
+            drawFish(fishMesh, fishes[i].modelMatrix(), mat, time, fishes[i].swimPhase());
         }
     }
 
@@ -708,6 +719,39 @@ inline void init(GLFWwindow* window)
               << " (powinna byc bliska 0, T i N prostopadle)\n";
     std::cout << "[NED-02] frame(0.5): dot(T,N)=" << glm::dot(fh.T, fh.N) << "\n";
 
+    // --- NED-04: druga sciezka dla ryb + ramki PTF --------------------------
+    fishSplineB.addControlPoint(glm::vec3(-7.0f, 0.5f,  3.0f));
+    fishSplineB.addControlPoint(glm::vec3(-2.0f, 1.0f,  7.0f));
+    fishSplineB.addControlPoint(glm::vec3( 5.0f, 1.5f,  6.0f));
+    fishSplineB.addControlPoint(glm::vec3( 7.0f, 0.8f, -2.0f));
+    fishSplineB.addControlPoint(glm::vec3( 1.0f, 2.0f, -6.0f));
+    fishSplineB.addControlPoint(glm::vec3(-5.0f, 1.2f, -4.0f));
+    fishSplineB.buildFrames(128);
+
+    std::vector<glm::vec3> splineBPts = fishSplineB.sampleLine(32);
+    splineBVertexCount = (int)splineBPts.size();
+    glGenVertexArrays(1, &splineBVAO);
+    glGenBuffers(1, &splineBVBO);
+    glBindVertexArray(splineBVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, splineBVBO);
+    glBufferData(GL_ARRAY_BUFFER, splineBPts.size() * sizeof(glm::vec3), splineBPts.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glBindVertexArray(0);
+
+    // --- NED-04: instancje ryb na obu sciezkach -----------------------------
+    // FishAnimation(path, speed [petla/s], tOffset, scale, swimPhase)
+    fishes.clear(); fishColors.clear();
+    fishes.emplace_back(&debugSpline, 0.060f, 0.00f, 1.5f, 0.0f);
+    fishColors.push_back(glm::vec3(0.95f, 0.45f, 0.10f)); // pomaranczowa
+    fishes.emplace_back(&debugSpline, 0.060f, 0.50f, 1.2f, 2.0f);
+    fishColors.push_back(glm::vec3(0.95f, 0.80f, 0.18f)); // zolta
+    fishes.emplace_back(&fishSplineB, 0.045f, 0.25f, 1.6f, 1.0f);
+    fishColors.push_back(glm::vec3(0.85f, 0.22f, 0.40f)); // czerwono-rozowa
+    fishes.emplace_back(&fishSplineB, 0.075f, 0.70f, 1.1f, 3.0f);
+    fishColors.push_back(glm::vec3(0.25f, 0.75f, 0.55f)); // zielono-morska
+    std::cout << "[NED-04] ryb na splajnach: " << fishes.size() << " (2 sciezki)\n";
+
     int w, h; glfwGetFramebufferSize(window, &w, &h);
     framebuffer_size_callback(window, w, h);
 }
@@ -721,6 +765,8 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programWaterOverlay);
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
+    glDeleteVertexArrays(1, &splineBVAO);
+    glDeleteBuffers(1, &splineBVBO);
     glDeleteVertexArrays(1, &ptfAxesVAO);
     glDeleteBuffers(1, &ptfAxesVBO);
     glDeleteVertexArrays(1, &waterQuadVAO);
