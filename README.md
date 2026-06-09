@@ -22,17 +22,17 @@ Metody dopiero robimy. Statusy odhaczamy w trakcie, szczegóły zadań są w [TA
 
 Metody obowiązkowe:
 
-- [ ] Normal mapping *(Olejnik)*
-- [x] Oświetlenie PBR *(Olejnik)* — bazowy Cook-Torrance (OLE-01)
-- [x] Kamera na kwaternionach *(Mróz)*
-- [ ] Shadow mapping *(Olejnik)*
-- [ ] Parallel Transport Frames *(Nędzyński)*
-- [ ] Podwodny skybox / cubemapa *(Nędzyński)*
+- Normal mapping *(Olejnik)*
+- Oświetlenie PBR *(Olejnik)* — Cook-Torrance + mapy materiałów (OLE-01/02)
+- Kamera na kwaternionach *(Mróz)*
+- Shadow mapping *(Olejnik)*
+- Parallel Transport Frames *(Nędzyński)*
+- Podwodny skybox / cubemapa *(Nędzyński)*
 
 Metody wybrane:
 
-- [ ] **A10** - pływanie ryb (animacja w vertex shaderze) *(Nędzyński)*
-- [ ] **B13** - ruchome światła: latarka + bioluminescencja *(Mróz)*
+- **A10** - pływanie ryb (animacja w vertex shaderze) *(Nędzyński)*
+- **B13** - ruchome światła: latarka + bioluminescencja *(Mróz)*
 
 ## Jak to zbudować
 
@@ -40,11 +40,11 @@ Cała ekipa robi w **Visual Studio na Windowsie**. Dokładna instrukcja (z przyw
 i sprawą toolsetu) jest w [UnderwaterScene/BUILD.md](UnderwaterScene/BUILD.md). W skrócie:
 
 1. Sklonuj repo:
-   ```
+  ```
    git clone https://github.com/Frothar/reef-of-the-lost-diver.git
-   ```
+  ```
 2. Wrzuć folder `dependencies/` z frameworka z zajęć (`cw 7/dependencies`) do `UnderwaterScene/`.
-   Ciężkie biblioteki Windows nie siedzą w repo, ale `glm` i `imgui` już tam są.
+  Ciężkie biblioteki Windows nie siedzą w repo, ale `glm` i `imgui` już tam są.
 3. Otwórz `UnderwaterScene/UnderwaterScene.sln`, ustaw `Debug | x86` i odpal F5.
 
 Jak masz VS 2022 i wyskoczy błąd o "v145" - kliknij prawym na projekt, "Retarget Projects",

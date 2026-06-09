@@ -37,6 +37,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <string>
+#include <fstream>
 
 // ---------------------------------------------------------------------------
 // Skybox cube geometry (positions only)
@@ -59,11 +60,26 @@ static const float skyboxVertices[] = {
 // ---------------------------------------------------------------------------
 // Shader programs / GPU resources
 // ---------------------------------------------------------------------------
+// OLE-02: zestaw map PBR (ambientCG naming: Prefix_Color, _Metalness, _Roughness, _AmbientOcclusion).
+struct PBRTextureSet
+{
+    GLuint albedoMap    = 0;
+    GLuint metallicMap  = 0;
+    GLuint roughnessMap = 0;
+    GLuint aoMap        = 0;
+    bool useAlbedoMap    = false;
+    bool useMetallicMap  = false;
+    bool useRoughnessMap = false;
+    bool useAoMap        = false;
+};
+
 struct PBRMaterial
 {
     glm::vec3 albedo    = glm::vec3(0.8f);
     float     metallic  = 0.0f;
     float     roughness = 0.5f;
+    PBRTextureSet tex;
+    glm::vec2   uvScale = glm::vec2(1.0f);
 };
 
 // NED-03 (A10): parametry deformacji plywania, wysylane do fish.vert.
@@ -130,6 +146,8 @@ namespace {
     PBRMaterial sphereMaterial = { glm::vec3(0.9f, 0.5f, 0.4f), 0.0f, 0.35f };
     PBRMaterial metalMaterial  = { glm::vec3(0.78f, 0.78f, 0.80f), 1.0f, 0.25f };
     PBRMaterial groundMaterial = { glm::vec3(0.55f, 0.48f, 0.35f), 0.0f, 0.95f };
+    bool groundUseTextures = true;
+    bool metalUseTextures  = true;
 
     // NED-03 (A10): animacja ryb (domyslne dostrojone do modelu models/fish.obj)
     FishParams  fishParams;
@@ -152,6 +170,64 @@ inline glm::mat4 createPerspectiveMatrix()
 }
 
 // ---------------------------------------------------------------------------
+// OLE-02: ladowanie i bindowanie map PBR
+// ---------------------------------------------------------------------------
+inline bool fileExists(const std::string& path)
+{
+    std::ifstream f(path);
+    return f.good();
+}
+
+inline void loadPBRTextureSet(const std::string& dir, const std::string& prefix, PBRTextureSet& tex)
+{
+    auto tryLoad = [&](const char* suffix, GLuint& id, bool& useFlag) {
+        std::string path = dir + "/" + prefix + suffix;
+        if (!fileExists(path)) return;
+        id = Core::LoadTexture(path.c_str());
+        useFlag = true;
+        std::cout << "Loaded PBR map: " << path << std::endl;
+    };
+
+    tryLoad("_Color.jpg",              tex.albedoMap,    tex.useAlbedoMap);
+    tryLoad("_Metalness.jpg",          tex.metallicMap,  tex.useMetallicMap);
+    tryLoad("_Roughness.jpg",          tex.roughnessMap, tex.useRoughnessMap);
+    tryLoad("_AmbientOcclusion.jpg",   tex.aoMap,        tex.useAoMap);
+}
+
+inline void setTextureFlags(PBRTextureSet& tex, bool enabled)
+{
+    if (tex.albedoMap)    tex.useAlbedoMap    = enabled;
+    if (tex.metallicMap)  tex.useMetallicMap  = enabled;
+    if (tex.roughnessMap) tex.useRoughnessMap = enabled;
+    if (tex.aoMap)        tex.useAoMap        = enabled;
+}
+
+// Wspolne uniformy + mapy dla pbr.frag (uzywane tez przez fish.vert + pbr.frag).
+inline void bindPBRMaterial(GLuint program, const PBRMaterial& material)
+{
+    const PBRTextureSet& t = material.tex;
+
+    glUniform3fv(glGetUniformLocation(program, "albedo"), 1, (float*)&material.albedo);
+    glUniform1f(glGetUniformLocation(program, "metallic"),  material.metallic);
+    glUniform1f(glGetUniformLocation(program, "roughness"), material.roughness);
+    glUniform2fv(glGetUniformLocation(program, "uvScale"), 1, (float*)&material.uvScale);
+
+    glUniform1i(glGetUniformLocation(program, "useAlbedoMap"),    t.useAlbedoMap ? 1 : 0);
+    glUniform1i(glGetUniformLocation(program, "useMetallicMap"),  t.useMetallicMap ? 1 : 0);
+    glUniform1i(glGetUniformLocation(program, "useRoughnessMap"), t.useRoughnessMap ? 1 : 0);
+    glUniform1i(glGetUniformLocation(program, "useAoMap"),        t.useAoMap ? 1 : 0);
+
+    if (t.useAlbedoMap)
+        Core::SetActiveTexture(t.albedoMap, "albedoMap", program, 0);
+    if (t.useMetallicMap)
+        Core::SetActiveTexture(t.metallicMap, "metallicMap", program, 1);
+    if (t.useRoughnessMap)
+        Core::SetActiveTexture(t.roughnessMap, "roughnessMap", program, 2);
+    if (t.useAoMap)
+        Core::SetActiveTexture(t.aoMap, "aoMap", program, 3);
+}
+
+// ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
 inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, const PBRMaterial& material)
@@ -169,9 +245,7 @@ inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, c
     glUniform3fv(glGetUniformLocation(programPBR, "lightDir"),   1, (float*)&sunDir);
     glUniform3fv(glGetUniformLocation(programPBR, "lightColor"), 1, (float*)&sunColor);
 
-    glUniform3fv(glGetUniformLocation(programPBR, "albedo"), 1, (float*)&material.albedo);
-    glUniform1f(glGetUniformLocation(programPBR, "metallic"),  material.metallic);
-    glUniform1f(glGetUniformLocation(programPBR, "roughness"), material.roughness);
+    bindPBRMaterial(programPBR, material);
 
     glUniform3fv(glGetUniformLocation(programPBR, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programPBR, "fogDensity"), fogDensity);
@@ -198,9 +272,7 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
     glUniform3fv(glGetUniformLocation(programFish, "lightDir"),   1, (float*)&sunDir);
     glUniform3fv(glGetUniformLocation(programFish, "lightColor"), 1, (float*)&sunColor);
 
-    glUniform3fv(glGetUniformLocation(programFish, "albedo"), 1, (float*)&material.albedo);
-    glUniform1f(glGetUniformLocation(programFish, "metallic"),  material.metallic);
-    glUniform1f(glGetUniformLocation(programFish, "roughness"), material.roughness);
+    bindPBRMaterial(programFish, material);
 
     glUniform3fv(glGetUniformLocation(programFish, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programFish, "fogDensity"), fogDensity);
@@ -522,6 +594,20 @@ inline void init(GLFWwindow* window)
     if (!loadModelToContext("./models/fish.obj", fishContext))
         std::cout << "Brak models/fish.obj – ryby beda uzywac kuli jako placeholdera" << std::endl;
 
+    // OLE-02: mapy PBR (piasek na dno, zardzewialy metal na kostke)
+    {
+        PBRTextureSet sandTex, rustTex;
+        loadPBRTextureSet("./textures/pbr/sand", "sand", sandTex);
+        loadPBRTextureSet("./textures/pbr/rusty_metal", "rusty_metal", rustTex);
+
+        groundMaterial.tex = sandTex;
+        groundMaterial.uvScale = glm::vec2(16.0f); // powtarzanie UV na duzej plaszczyznie
+
+        metalMaterial.tex = rustTex;
+        metalMaterial.metallic  = 1.0f;  // fallback gdy mapy wylaczone
+        metalMaterial.roughness = 0.35f;
+    }
+
     // Skybox VAO
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
@@ -686,13 +772,18 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::ColorEdit3("Sun color",   (float*)&sunColor);
         ImGui::SliderFloat3("Sun dir",   (float*)&sunDir, -1.0f, 1.0f);
         ImGui::Separator();
-        ImGui::Text("OLE-01 PBR test (sphere)");
+        ImGui::Text("OLE-01 PBR (kula - uniformy)");
         ImGui::ColorEdit3("Albedo", (float*)&sphereMaterial.albedo);
         ImGui::SliderFloat("Metallic",  &sphereMaterial.metallic,  0.0f, 1.0f);
         ImGui::SliderFloat("Roughness", &sphereMaterial.roughness, 0.0f, 1.0f);
-        ImGui::Text("Metal cube (po prawej od kuli): roughness %.2f", metalMaterial.roughness);
-        ImGui::SliderFloat("Metal roughness", &metalMaterial.roughness, 0.0f, 1.0f);
-        ImGui::TextDisabled("Material metalowy = kod PBR, nie osobny model");
+        ImGui::Separator();
+        ImGui::Text("OLE-02 PBR tekstury");
+        if (ImGui::Checkbox("Mapy piasku (dno)", &groundUseTextures))
+            setTextureFlags(groundMaterial.tex, groundUseTextures);
+        if (ImGui::Checkbox("Mapy zardzewialego metalu (kostka)", &metalUseTextures))
+            setTextureFlags(metalMaterial.tex, metalUseTextures);
+        ImGui::SliderFloat("Metal roughness (fallback)", &metalMaterial.roughness, 0.0f, 1.0f);
+        ImGui::TextDisabled("Kula i ryby: tylko uniformy");
         ImGui::PopItemWidth();
         ImGui::End();
 
