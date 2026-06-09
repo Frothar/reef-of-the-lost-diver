@@ -32,6 +32,7 @@
     <ClCompile Include="src\Render_Utils.cpp"><Filter>Source\Core</Filter></ClCompile>
     <ClCompile Include="src\Shader_Loader.cpp"><Filter>Source\Core</Filter></ClCompile>
     <ClCompile Include="src\Spline.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="src\FishAnimation.cpp"><Filter>Source</Filter></ClCompile>
     <ClCompile Include="src\Texture.cpp"><Filter>Source\Core</Filter></ClCompile>
     <ClCompile Include="src\SOIL\image_DXT.c"><Filter>Source\SOIL</Filter></ClCompile>
     <ClCompile Include="src\SOIL\image_helper.c"><Filter>Source\SOIL</Filter></ClCompile>
@@ -48,6 +49,7 @@
     <ClInclude Include="src\scene_underwater.hpp"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\QuaternionCamera.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Spline.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="src\FishAnimation.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Box.cpp"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Camera.h"><Filter>Header\Core</Filter></ClInclude>
     <ClInclude Include="src\Render_Utils.h"><Filter>Header\Core</Filter></ClInclude>
