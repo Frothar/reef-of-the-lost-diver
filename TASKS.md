@@ -42,10 +42,10 @@ Materiały: [LearnOpenGL PBR Theory](https://learnopengl.com/PBR/Theory),
 
 Czytanie materiałów z tekstur zamiast ze sztywnych wartości.
 
-- [ ] samplery: `albedoMap`, `metallicMap`, `roughnessMap`, `aoMap`
-- [ ] flaga `useTexture` (albo maska) na mapę, żeby obiekty bez tekstur dalej działały
-- [ ] kod w C++ do wczytywania materiałów (tekstury, bindowanie do jednostek)
-- [ ] test na min. 2 zestawach tekstur (np. piasek + zardzewiały metal)
+- [x] samplery: `albedoMap`, `metallicMap`, `roughnessMap`, `aoMap`
+- [x] flaga `useTexture` (albo maska) na mapę, żeby obiekty bez tekstur dalej działały
+- [x] kod w C++ do wczytywania materiałów (tekstury, bindowanie do jednostek)
+- [x] test na min. 2 zestawach tekstur (np. piasek + zardzewiały metal)
 
 Gotowe gdy: obiekty renderują się z pełnymi zestawami PBR z [ambientCG](https://ambientcg.com),
 a te bez tekstur wracają do wartości uniform.
