@@ -1,6 +1,6 @@
 #version 410 core
 
-// OLE-01/02/03: Cook-Torrance PBR + normal mapping (M1) w przestrzeni stycznej.
+// OLE-01/02/03/04: Cook-Torrance PBR + normal mapping (M1) + shadow mapping (M4).
 // Varyings musza byc zgodne z pbr.vert, fish.vert (NED-03) i jellyfish.vert (NED-06).
 
 in vec3 worldPos;
@@ -33,9 +33,48 @@ uniform vec2 uvScale;
 uniform vec3  fogColor;
 uniform float fogDensity;
 
+// --- OLE-04: Shadow mapping (metoda obowiazkowa M4) ---
+uniform mat4 lightSpaceMatrix;     // projekcja ortho * view z perspektywy swiatla
+uniform sampler2D shadowMap;       // tekstura glebi z przebiegu cieni (2048x2048)
+uniform bool useShadows;           // flaga wlaczajaca cienie
+
 out vec4 fragColor;
 
 const float PI = 3.14159265359;
+
+// --- OLE-04: obliczenie wspolczynnika cienia (0.0 = pelny cien, 1.0 = w swietle) ---
+float ShadowCalculation(vec4 fragPosLightSpace, vec3 N, vec3 L)
+{
+    // Perspektywiczny dzielnik (dla ortho = 1, ale robimy poprawnie)
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+    // Przeksztalcenie z NDC [-1,1] do texcoords [0,1]
+    projCoords = projCoords * 0.5 + 0.5;
+
+    // Fragmenty poza frustum swiatla - brak cienia
+    if (projCoords.z > 1.0)
+        return 1.0;
+
+    // Bias zalezny od kata miedzy normalna a kierunkiem swiatla
+    // Im bardziej pod katem, tym wiekszy bias (zapobiega shadow acne)
+    float bias = max(0.05 * (1.0 - dot(N, L)), 0.005);
+
+    // --- PCF 3x3: filtrowanie mapy cieni na miekkie krawedzie ---
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (projCoords.z - bias) > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0; // srednia z 9 probek
+
+    return 1.0 - shadow; // 1.0 = w swietle, 0.0 = pelny cien
+}
 
 float DistributionGGX(vec3 N, vec3 H, float rough)
 {
@@ -93,15 +132,10 @@ void main()
         aoVal = texture(aoMap, uv).r;
 
     // --- OLE-03: Normal mapping (metoda obowiazkowa M1) ---
-    // Jesli mapa normalnych jest aktywna, probkujemy ja, przemapowujemy z [0,1]
-    // na [-1,1] i transformujemy przez macierz TBN (tangent space -> world space).
-    // Bez mapy - uzywamy geometrycznej normalnej z vertex shadera.
     vec3 N;
     if (useNormalMap)
     {
-        // Probka z normal mapy: wartosci [0,1] -> przestrzen styczna [-1,1]
         vec3 tangentNormal = texture(normalMap, uv).rgb * 2.0 - 1.0;
-        // Transformacja z przestrzeni stycznej do swiata przez TBN
         N = normalize(TBN * tangentNormal);
     }
     else
@@ -115,7 +149,6 @@ void main()
 
     vec3 F0 = mix(vec3(0.04), albedoColor, metallicVal);
 
-    // Zaburzona normalna N uzywa sie we WSZYSTKICH obliczeniach PBR
     float NDF = DistributionGGX(N, H, roughnessVal);
     float G   = GeometrySmith(N, V, L, roughnessVal);
     vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
@@ -127,6 +160,15 @@ void main()
 
     float NdotL = max(dot(N, L), 0.0);
     vec3 Lo = (kD * albedoColor / PI + specular) * lightColor * NdotL;
+
+    // --- OLE-04: wpiniecie wspolczynnika cienia w wyjscie PBR ---
+    // Cien wplywa TYLKO na swiatlo kierunkowe (Lo), ambient pozostaje nienaruszony.
+    if (useShadows)
+    {
+        vec4 fragPosLightSpace = lightSpaceMatrix * vec4(worldPos, 1.0);
+        float shadowFactor = ShadowCalculation(fragPosLightSpace, N, L);
+        Lo *= shadowFactor;
+    }
 
     vec3 ambient = vec3(0.03) * albedoColor * aoVal;
     vec3 color = ambient + Lo;
@@ -140,3 +182,4 @@ void main()
 
     fragColor = vec4(color, 1.0);
 }
+

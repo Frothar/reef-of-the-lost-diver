@@ -71,14 +71,14 @@ Zależy od: OLE-02. Materiały: [LearnOpenGL Normal Mapping](https://learnopengl
 
 Cienie dla głównego światła kierunkowego z filtrowaniem PCF.
 
-- [ ] FBO tylko z głębią (tekstura 2048x2048, `GL_DEPTH_COMPONENT`)
-- [ ] `shaders/shadow_depth.vert` + `.frag` - minimalny shader zapisujący głębię
-- [ ] macierz ortho + view dla światła
-- [ ] przebieg cieni: renderowanie geometrii do FBO głębi
-- [ ] przebieg główny: fragment do przestrzeni światła, próbka mapy cieni, porównanie głębi
-- [ ] bias zależny od kąta: `bias = max(0.05 * (1.0 - dot(N, L)), 0.005)`
-- [ ] PCF 3x3 na miękkie krawędzie
-- [ ] wpięcie współczynnika cienia w wyjście shadera PBR
+- [x] FBO tylko z głębią (tekstura 2048x2048, `GL_DEPTH_COMPONENT`)
+- [x] `shaders/shadow_depth.vert` + `.frag` - minimalny shader zapisujący głębię
+- [x] macierz ortho + view dla światła
+- [x] przebieg cieni: renderowanie geometrii do FBO głębi
+- [x] przebieg główny: fragment do przestrzeni światła, próbka mapy cieni, porównanie głębi
+- [x] bias zależny od kąta: `bias = max(0.05 * (1.0 - dot(N, L)), 0.005)`
+- [x] PCF 3x3 na miękkie krawędzie
+- [x] wpięcie współczynnika cienia w wyjście shadera PBR
 
 Gotowe gdy: wrak (albo duży obiekt) rzuca widoczny cień na dno, brak migoczących kropek na
 oświetlonych powierzchniach, krawędzie miękkie a nie poszarpane.
