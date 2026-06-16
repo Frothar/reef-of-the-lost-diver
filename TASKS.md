@@ -113,10 +113,10 @@ Zależy od: OLE-04.
 
 ## OLE-07 (P3) Post-processing - kolorystyka podwodna (~3h) - tydzień 3-4
 
-- [ ] renderowanie sceny do pośredniego FBO (kolor + głębia)
-- [ ] fullscreen quad z niebiesko-zielonym tintem
-- [ ] mgła zależna od głębi (wykładnicza, niebiesko-zielona)
-- [ ] opcjonalnie lekka aberracja chromatyczna / zniekształcenie na brzegach
+- [x] renderowanie sceny do pośredniego FBO (kolor + głębia)
+- [x] fullscreen quad z niebiesko-zielonym tintem
+- [x] mgła zależna od głębi (wykładnicza, niebiesko-zielona)
+- [x] opcjonalnie lekka aberracja chromatyczna / zniekształcenie na brzegach
 
 Gotowe gdy: scena bardziej "podwodna", parametry łatwe do podkręcenia.
 Zależy od: reszty renderingu.
