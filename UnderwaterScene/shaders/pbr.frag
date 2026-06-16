@@ -37,10 +37,13 @@ uniform vec2 uvScale;
 uniform vec3  fogColor;
 uniform float fogDensity;
 
-// --- OLE-04: Shadow mapping ---
+// --- OLE-04/06: Shadow mapping ---
 uniform mat4 lightSpaceMatrix;
 uniform sampler2D shadowMap;
 uniform bool useShadows;
+uniform float shadowBiasMin;       // OLE-06: minimalny bias (domyslnie 0.001)
+uniform float shadowBiasMax;       // OLE-06: maks bias przy ostrym kacie (domyslnie 0.01)
+uniform bool  usePCF5x5;           // OLE-06: PCF 5x5 zamiast 3x3 (mieksze krawedzie)
 
 // --- OLE-05: Wiele swiatel ---
 const int MAX_POINT_LIGHTS = 8;
@@ -77,29 +80,51 @@ out vec4 fragColor;
 
 const float PI = 3.14159265359;
 
-// --- OLE-04: obliczenie wspolczynnika cienia ---
+// --- OLE-04/06: obliczenie wspolczynnika cienia ---
+// OLE-06: poprawiony bias (konfigurowalny), sprawdzenie XY frustum, opcjonalny PCF 5x5.
 float ShadowCalculation(vec4 fragPosLightSpace, vec3 N, vec3 L)
 {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
 
+    // OLE-06: fragmenty poza frustum swiatla (Z lub XY) - brak cienia
     if (projCoords.z > 1.0)
         return 1.0;
+    if (projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 1.0;
 
-    float bias = max(0.05 * (1.0 - dot(N, L)), 0.005);
+    // OLE-06: konfigurowalny bias zalezny od kata (zmniejsza peter-panning)
+    float bias = max(shadowBiasMax * (1.0 - dot(N, L)), shadowBiasMin);
 
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
 
-    for (int x = -1; x <= 1; ++x)
+    if (usePCF5x5)
     {
-        for (int y = -1; y <= 1; ++y)
+        // PCF 5x5: 25 probek - bardziej miekkie krawedzie
+        for (int x = -2; x <= 2; ++x)
         {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += (projCoords.z - bias) > pcfDepth ? 1.0 : 0.0;
+            for (int y = -2; y <= 2; ++y)
+            {
+                float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+                shadow += (projCoords.z - bias) > pcfDepth ? 1.0 : 0.0;
+            }
         }
+        shadow /= 25.0;
     }
-    shadow /= 9.0;
+    else
+    {
+        // PCF 3x3: 9 probek - szybsze
+        for (int x = -1; x <= 1; ++x)
+        {
+            for (int y = -1; y <= 1; ++y)
+            {
+                float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+                shadow += (projCoords.z - bias) > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+        shadow /= 9.0;
+    }
 
     return 1.0 - shadow;
 }
