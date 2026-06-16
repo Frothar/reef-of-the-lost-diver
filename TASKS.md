@@ -90,11 +90,11 @@ Materiały: [LearnOpenGL Shadow Mapping](https://learnopengl.com/Advanced-Lighti
 
 Obsługa wielu typów świateł z systemu Mroza.
 
-- [ ] tablice uniform `PointLight[MAX]` i `SpotLight[MAX]`
-- [ ] `calcPointLight()` - PBR z tłumieniem punktowym
-- [ ] `calcSpotLight()` - PBR ze stożkiem reflektora + tłumienie
-- [ ] sumowanie radiancji `Lo` po wszystkich aktywnych światłach
-- [ ] dogadać z Mrozem układ struktur i nazwy uniformów
+- [x] tablice uniform `PointLight[MAX]` i `SpotLight[MAX]`
+- [x] `calcPointLight()` - PBR z tłumieniem punktowym
+- [x] `calcSpotLight()` - PBR ze stożkiem reflektora + tłumienie
+- [x] sumowanie radiancji `Lo` po wszystkich aktywnych światłach
+- [x] dogadać z Mrozem układ struktur i nazwy uniformów
 
 Gotowe gdy: scena dobrze oświetlona słońcem + ruchomymi światłami + reflektorem, punktowe mają
 widoczny spadek z odległością, reflektor ma stożek (inner/outer cutoff).
