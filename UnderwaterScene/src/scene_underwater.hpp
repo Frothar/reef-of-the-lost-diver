@@ -68,10 +68,12 @@ struct PBRTextureSet
     GLuint metallicMap  = 0;
     GLuint roughnessMap = 0;
     GLuint aoMap        = 0;
+    GLuint normalMap    = 0;          // OLE-03: normal map w przestrzeni stycznej
     bool useAlbedoMap    = false;
     bool useMetallicMap  = false;
     bool useRoughnessMap = false;
     bool useAoMap        = false;
+    bool useNormalMap    = false;     // OLE-03: flaga wlaczajaca normal mapping
 };
 
 struct PBRMaterial
@@ -166,7 +168,9 @@ namespace {
     PBRMaterial metalMaterial  = { glm::vec3(0.78f, 0.78f, 0.80f), 1.0f, 0.25f };
     PBRMaterial groundMaterial = { glm::vec3(0.55f, 0.48f, 0.35f), 0.0f, 0.95f };
     bool groundUseTextures = true;
+    bool groundUseNormalMap = true;  // OLE-03: osobny toggle na normal mapy
     bool metalUseTextures  = true;
+    bool metalUseNormalMap = true;   // OLE-03
 
     // NED-03 (A10): animacja ryb (domyslne dostrojone do modelu models/fish.obj)
     FishParams  fishParams;
@@ -220,6 +224,7 @@ inline void loadPBRTextureSet(const std::string& dir, const std::string& prefix,
     tryLoad("_Metalness.jpg",          tex.metallicMap,  tex.useMetallicMap);
     tryLoad("_Roughness.jpg",          tex.roughnessMap, tex.useRoughnessMap);
     tryLoad("_AmbientOcclusion.jpg",   tex.aoMap,        tex.useAoMap);
+    tryLoad("_NormalGL.jpg",           tex.normalMap,    tex.useNormalMap);  // OLE-03
 }
 
 inline void setTextureFlags(PBRTextureSet& tex, bool enabled)
@@ -228,6 +233,7 @@ inline void setTextureFlags(PBRTextureSet& tex, bool enabled)
     if (tex.metallicMap)  tex.useMetallicMap  = enabled;
     if (tex.roughnessMap) tex.useRoughnessMap = enabled;
     if (tex.aoMap)        tex.useAoMap        = enabled;
+    if (tex.normalMap)    tex.useNormalMap    = enabled;  // OLE-03
 }
 
 // Wspolne uniformy + mapy dla pbr.frag (uzywane tez przez fish.vert + pbr.frag).
@@ -244,6 +250,7 @@ inline void bindPBRMaterial(GLuint program, const PBRMaterial& material)
     glUniform1i(glGetUniformLocation(program, "useMetallicMap"),  t.useMetallicMap ? 1 : 0);
     glUniform1i(glGetUniformLocation(program, "useRoughnessMap"), t.useRoughnessMap ? 1 : 0);
     glUniform1i(glGetUniformLocation(program, "useAoMap"),        t.useAoMap ? 1 : 0);
+    glUniform1i(glGetUniformLocation(program, "useNormalMap"),    t.useNormalMap ? 1 : 0);  // OLE-03
 
     if (t.useAlbedoMap)
         Core::SetActiveTexture(t.albedoMap, "albedoMap", program, 0);
@@ -253,6 +260,8 @@ inline void bindPBRMaterial(GLuint program, const PBRMaterial& material)
         Core::SetActiveTexture(t.roughnessMap, "roughnessMap", program, 2);
     if (t.useAoMap)
         Core::SetActiveTexture(t.aoMap, "aoMap", program, 3);
+    if (t.useNormalMap)                                                                      // OLE-03
+        Core::SetActiveTexture(t.normalMap, "normalMap", program, 4);                        // OLE-03
 }
 
 // ---------------------------------------------------------------------------
@@ -928,6 +937,19 @@ inline void renderLoop(GLFWwindow* window)
             setTextureFlags(metalMaterial.tex, metalUseTextures);
         ImGui::SliderFloat("Metal roughness (fallback)", &metalMaterial.roughness, 0.0f, 1.0f);
         ImGui::TextDisabled("Kula i ryby: tylko uniformy");
+        ImGui::Separator();
+        ImGui::Text("OLE-03 Normal mapping (M1)");
+        if (ImGui::Checkbox("Normal map: piasek (dno)", &groundUseNormalMap))
+        {
+            if (groundMaterial.tex.normalMap)
+                groundMaterial.tex.useNormalMap = groundUseNormalMap;
+        }
+        if (ImGui::Checkbox("Normal map: metal (kostka)", &metalUseNormalMap))
+        {
+            if (metalMaterial.tex.normalMap)
+                metalMaterial.tex.useNormalMap = metalUseNormalMap;
+        }
+        ImGui::TextDisabled("Wlacz/wylacz aby porownac plaski vs wyboje");
         ImGui::PopItemWidth();
         ImGui::End();
 

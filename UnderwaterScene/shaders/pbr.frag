@@ -1,7 +1,7 @@
 #version 410 core
 
-// OLE-01/02: Cook-Torrance PBR — uniformy lub mapy (per-flag use*Map).
-// Varyings musza byc zgodne z pbr.vert i fish.vert (NED-03).
+// OLE-01/02/03: Cook-Torrance PBR + normal mapping (M1) w przestrzeni stycznej.
+// Varyings musza byc zgodne z pbr.vert, fish.vert (NED-03) i jellyfish.vert (NED-06).
 
 in vec3 worldPos;
 in vec3 worldNormal;
@@ -20,11 +20,13 @@ uniform sampler2D albedoMap;
 uniform sampler2D metallicMap;
 uniform sampler2D roughnessMap;
 uniform sampler2D aoMap;
+uniform sampler2D normalMap;       // OLE-03: normal map w przestrzeni stycznej
 
 uniform bool useAlbedoMap;
 uniform bool useMetallicMap;
 uniform bool useRoughnessMap;
 uniform bool useAoMap;
+uniform bool useNormalMap;          // OLE-03: flaga wlaczajaca normal mapping
 
 uniform vec2 uvScale;
 
@@ -90,13 +92,30 @@ void main()
     if (useAoMap)
         aoVal = texture(aoMap, uv).r;
 
-    vec3 N = normalize(worldNormal);
+    // --- OLE-03: Normal mapping (metoda obowiazkowa M1) ---
+    // Jesli mapa normalnych jest aktywna, probkujemy ja, przemapowujemy z [0,1]
+    // na [-1,1] i transformujemy przez macierz TBN (tangent space -> world space).
+    // Bez mapy - uzywamy geometrycznej normalnej z vertex shadera.
+    vec3 N;
+    if (useNormalMap)
+    {
+        // Probka z normal mapy: wartosci [0,1] -> przestrzen styczna [-1,1]
+        vec3 tangentNormal = texture(normalMap, uv).rgb * 2.0 - 1.0;
+        // Transformacja z przestrzeni stycznej do swiata przez TBN
+        N = normalize(TBN * tangentNormal);
+    }
+    else
+    {
+        N = normalize(worldNormal);
+    }
+
     vec3 V = normalize(cameraPos - worldPos);
     vec3 L = normalize(lightDir);
     vec3 H = normalize(V + L);
 
     vec3 F0 = mix(vec3(0.04), albedoColor, metallicVal);
 
+    // Zaburzona normalna N uzywa sie we WSZYSTKICH obliczeniach PBR
     float NDF = DistributionGGX(N, H, roughnessVal);
     float G   = GeometrySmith(N, V, L, roughnessVal);
     vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
