@@ -182,6 +182,50 @@ namespace {
     bool metalUseTextures  = true;
     bool metalUseNormalMap = true;   // OLE-03
 
+    // --- OLE-05: Wiele swiatel -----------------------------------------------
+    // Struktury zgodne z uniformami w pbr.frag
+    struct PointLightCPU {
+        glm::vec3 position  = glm::vec3(0.0f);
+        glm::vec3 color     = glm::vec3(1.0f);
+        float     intensity = 1.0f;
+        float     constant  = 1.0f;
+        float     linear    = 0.14f;
+        float     quadratic = 0.07f;
+    };
+    struct SpotLightCPU {
+        glm::vec3 position   = glm::vec3(0.0f);
+        glm::vec3 direction  = glm::vec3(0.0f, -1.0f, 0.0f);
+        glm::vec3 color      = glm::vec3(1.0f);
+        float     intensity  = 1.0f;
+        float     constant   = 1.0f;
+        float     linear     = 0.09f;
+        float     quadratic  = 0.032f;
+        float     innerCutoff = glm::cos(glm::radians(12.5f));
+        float     outerCutoff = glm::cos(glm::radians(17.5f));
+    };
+
+    static const int MAX_POINT_LIGHTS = 8;
+    static const int MAX_SPOT_LIGHTS  = 4;
+    PointLightCPU pointLights[MAX_POINT_LIGHTS];
+    int numPointLights = 0;
+    SpotLightCPU spotLights[MAX_SPOT_LIGHTS];
+    int numSpotLights = 0;
+
+    // Bioluminescencja: 3 dryfujace swiatla punktowe
+    bool showBioLights = true;
+    glm::vec3 bioBasePos[3] = {
+        glm::vec3(-3.0f, 1.5f, 2.0f),
+        glm::vec3( 4.0f, 2.0f, -1.5f),
+        glm::vec3( 0.0f, 0.5f, -4.0f),
+    };
+    glm::vec3 bioColors[3] = {
+        glm::vec3(0.2f, 0.5f, 1.0f),    // niebieski
+        glm::vec3(0.1f, 0.9f, 0.4f),    // zielony
+        glm::vec3(0.6f, 0.2f, 0.9f),    // fioletowy
+    };
+    float bioIntensity = 3.0f;
+    float bioPulseSpeed = 1.5f;
+
     // NED-03 (A10): animacja ryb (domyslne dostrojone do modelu models/fish.obj)
     FishParams  fishParams;
     PBRMaterial fishMaterial = { glm::vec3(0.30f, 0.55f, 0.75f), 0.1f, 0.45f }; // srebrzysto-niebieska
@@ -288,6 +332,37 @@ inline void bindShadowUniforms(GLuint program, const glm::mat4& lightSpaceMat)
     glUniform1i(glGetUniformLocation(program, "shadowMap"), 5);
 }
 
+// OLE-05: wysyla tablice swiatel punktowych i reflektorow do aktywnego programu.
+inline void bindLightUniforms(GLuint program)
+{
+    glUniform1i(glGetUniformLocation(program, "numPointLights"), numPointLights);
+    for (int i = 0; i < numPointLights; ++i)
+    {
+        std::string base = "pointLights[" + std::to_string(i) + "]";
+        glUniform3fv(glGetUniformLocation(program, (base + ".position").c_str()),  1, (float*)&pointLights[i].position);
+        glUniform3fv(glGetUniformLocation(program, (base + ".color").c_str()),     1, (float*)&pointLights[i].color);
+        glUniform1f(glGetUniformLocation(program,  (base + ".intensity").c_str()),  pointLights[i].intensity);
+        glUniform1f(glGetUniformLocation(program,  (base + ".constant").c_str()),   pointLights[i].constant);
+        glUniform1f(glGetUniformLocation(program,  (base + ".linear").c_str()),     pointLights[i].linear);
+        glUniform1f(glGetUniformLocation(program,  (base + ".quadratic").c_str()),  pointLights[i].quadratic);
+    }
+
+    glUniform1i(glGetUniformLocation(program, "numSpotLights"), numSpotLights);
+    for (int i = 0; i < numSpotLights; ++i)
+    {
+        std::string base = "spotLights[" + std::to_string(i) + "]";
+        glUniform3fv(glGetUniformLocation(program, (base + ".position").c_str()),   1, (float*)&spotLights[i].position);
+        glUniform3fv(glGetUniformLocation(program, (base + ".direction").c_str()),  1, (float*)&spotLights[i].direction);
+        glUniform3fv(glGetUniformLocation(program, (base + ".color").c_str()),      1, (float*)&spotLights[i].color);
+        glUniform1f(glGetUniformLocation(program,  (base + ".intensity").c_str()),   spotLights[i].intensity);
+        glUniform1f(glGetUniformLocation(program,  (base + ".constant").c_str()),    spotLights[i].constant);
+        glUniform1f(glGetUniformLocation(program,  (base + ".linear").c_str()),      spotLights[i].linear);
+        glUniform1f(glGetUniformLocation(program,  (base + ".quadratic").c_str()),   spotLights[i].quadratic);
+        glUniform1f(glGetUniformLocation(program,  (base + ".innerCutoff").c_str()), spotLights[i].innerCutoff);
+        glUniform1f(glGetUniformLocation(program,  (base + ".outerCutoff").c_str()), spotLights[i].outerCutoff);
+    }
+}
+
 // OLE-04: oblicza macierz lightSpace (ortho * view) dla swiatla kierunkowego.
 inline glm::mat4 computeLightSpaceMatrix()
 {
@@ -319,6 +394,7 @@ inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix,
 
     bindPBRMaterial(programPBR, material);
     bindShadowUniforms(programPBR, lightSpaceMat);
+    bindLightUniforms(programPBR);  // OLE-05
 
     glUniform3fv(glGetUniformLocation(programPBR, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programPBR, "fogDensity"), fogDensity);
@@ -348,6 +424,7 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
 
     bindPBRMaterial(programFish, material);
     bindShadowUniforms(programFish, lightSpaceMat);
+    bindLightUniforms(programFish);  // OLE-05
 
     glUniform3fv(glGetUniformLocation(programFish, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programFish, "fogDensity"), fogDensity);
@@ -385,6 +462,7 @@ inline void drawJellyfish(Core::RenderContext& context, glm::mat4 modelMatrix,
 
     bindPBRMaterial(programJelly, material);
     bindShadowUniforms(programJelly, lightSpaceMat);
+    bindLightUniforms(programJelly);  // OLE-05
 
     glUniform3fv(glGetUniformLocation(programJelly, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programJelly, "fogDensity"), fogDensity);
@@ -529,6 +607,32 @@ inline void drawShadowDepth(Core::RenderContext& context, const glm::mat4& model
 inline void renderScene(GLFWwindow* window)
 {
     float time = (float)glfwGetTime();
+
+    // --- OLE-05: aktualizacja swiatel punktowych (bioluminescencja) -----------
+    numPointLights = 0;
+    numSpotLights  = 0;
+    if (showBioLights)
+    {
+        for (int i = 0; i < 3 && numPointLights < MAX_POINT_LIGHTS; ++i)
+        {
+            PointLightCPU& pl = pointLights[numPointLights];
+            // Dryfujaca pozycja (wolny sin/cos z roznymi fazami)
+            float phase = time * 0.3f + i * 2.1f;
+            pl.position = bioBasePos[i] + glm::vec3(
+                std::sin(phase) * 1.5f,
+                std::sin(phase * 0.7f + 1.0f) * 0.8f,
+                std::cos(phase * 0.5f) * 1.2f
+            );
+            pl.color     = bioColors[i];
+            // Pulsujaca jasnosc (bioluminescencja miga)
+            float pulse  = 0.5f + 0.5f * std::sin(time * bioPulseSpeed + i * 1.3f);
+            pl.intensity = bioIntensity * pulse;
+            pl.constant  = 1.0f;
+            pl.linear    = 0.22f;
+            pl.quadratic = 0.20f;
+            ++numPointLights;
+        }
+    }
 
     // Precompute model matrices (uzywane zarowno w shadow pass jak i main pass)
     glm::mat4 groundModel = glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(40.0f, 0.2f, 40.0f));
@@ -1083,6 +1187,15 @@ inline void renderLoop(GLFWwindow* window)
                 metalMaterial.tex.useNormalMap = metalUseNormalMap;
         }
         ImGui::TextDisabled("Wlacz/wylacz aby porownac plaski vs wyboje");
+        ImGui::Separator();
+        ImGui::Text("OLE-05 Wiele swiatel");
+        ImGui::Checkbox("Bioluminescencja (3 point lights)", &showBioLights);
+        ImGui::SliderFloat("Bio intensywnosc", &bioIntensity, 0.0f, 10.0f);
+        ImGui::SliderFloat("Bio pulsowanie", &bioPulseSpeed, 0.0f, 5.0f);
+        ImGui::ColorEdit3("Bio 1 (niebieski)", (float*)&bioColors[0]);
+        ImGui::ColorEdit3("Bio 2 (zielony)",   (float*)&bioColors[1]);
+        ImGui::ColorEdit3("Bio 3 (fioletowy)", (float*)&bioColors[2]);
+        ImGui::Text("Aktywne: %d point, %d spot", numPointLights, numSpotLights);
         ImGui::PopItemWidth();
         ImGui::End();
 
