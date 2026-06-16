@@ -56,11 +56,11 @@ Zależy od: OLE-01.
 
 Normal mapping w przestrzeni stycznej, wpięty w shader PBR.
 
-- [ ] tangent + bitangent na wierzchołek (Assimp to liczy)
-- [ ] macierz TBN w vertex shaderze, przekazana do fragmentu
-- [ ] we fragmencie: próbka z normal mapy, przemapowanie [0,1] → [-1,1], transformacja przez TBN
-- [ ] użycie zaburzonej normalnej `N` we wszystkich obliczeniach PBR
-- [ ] na min. 2 materiałach (dno + kadłub wraka albo koral)
+- [x] tangent + bitangent na wierzchołek (Assimp to liczy)
+- [x] macierz TBN w vertex shaderze, przekazana do fragmentu
+- [x] we fragmencie: próbka z normal mapy, przemapowanie [0,1] → [-1,1], transformacja przez TBN
+- [x] użycie zaburzonej normalnej `N` we wszystkich obliczeniach PBR
+- [x] na min. 2 materiałach (dno + kadłub wraka albo koral)
 
 Gotowe gdy: powierzchnia ma widoczne wyboje reagujące na światło, wyłączenie normal mapy daje
 wyraźnie płaski wygląd, brak szwów na granicach UV.
