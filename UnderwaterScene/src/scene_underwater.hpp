@@ -125,6 +125,10 @@ namespace {
     float  shadowNear = -30.0f;        // near/far planes ortho
     float  shadowFar  =  30.0f;
     bool   useShadows = true;
+    // OLE-06: strojenie cieni
+    float  shadowBiasMin = 0.001f;     // minimalny bias
+    float  shadowBiasMax = 0.01f;      // maks bias przy ostrym kacie
+    bool   usePCF5x5 = false;          // PCF 5x5 zamiast 3x3
 
     Core::RenderContext sphereContext;
     Core::RenderContext cubeContext;
@@ -326,6 +330,9 @@ inline void bindShadowUniforms(GLuint program, const glm::mat4& lightSpaceMat)
 {
     glUniformMatrix4fv(glGetUniformLocation(program, "lightSpaceMatrix"), 1, GL_FALSE, (float*)&lightSpaceMat);
     glUniform1i(glGetUniformLocation(program, "useShadows"), useShadows ? 1 : 0);
+    glUniform1f(glGetUniformLocation(program, "shadowBiasMin"), shadowBiasMin);   // OLE-06
+    glUniform1f(glGetUniformLocation(program, "shadowBiasMax"), shadowBiasMax);   // OLE-06
+    glUniform1i(glGetUniformLocation(program, "usePCF5x5"), usePCF5x5 ? 1 : 0);  // OLE-06
     // Shadow map na texture unit 5 (0-4 zajete przez PBR mapy)
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, shadowDepthTex);
@@ -1161,6 +1168,9 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::Text("OLE-04 Shadow mapping (M4)");
         ImGui::Checkbox("Cienie wlaczone", &useShadows);
         ImGui::SliderFloat("Shadow ortho size", &shadowOrthoSize, 5.0f, 60.0f);
+        ImGui::SliderFloat("Bias min", &shadowBiasMin, 0.0f, 0.01f, "%.4f");
+        ImGui::SliderFloat("Bias max", &shadowBiasMax, 0.0f, 0.1f, "%.3f");
+        ImGui::Checkbox("PCF 5x5 (mieksze krawedzie)", &usePCF5x5);
         ImGui::Separator();
         ImGui::Text("OLE-01 PBR (kula - uniformy)");
         ImGui::ColorEdit3("Albedo", (float*)&sphereMaterial.albedo);

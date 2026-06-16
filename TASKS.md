@@ -103,10 +103,10 @@ Zależy od: OLE-01, MRZ-05.
 
 ## OLE-06 (P2) Poprawki i polerka cieni (~3h) - tydzień 3
 
-- [ ] peter-panning (cień odkleja się od obiektu) - poprawa biasu
-- [ ] pokrycie mapy cieni (obiekty poza frustum światła) - poprawa rozmiaru ortho
-- [ ] opcjonalnie front-face culling w przebiegu cieni
-- [ ] opcjonalnie druga mapa cieni dla reflektora latarki
+- [x] peter-panning (cień odkleja się od obiektu) - poprawa biasu
+- [x] pokrycie mapy cieni (obiekty poza frustum światła) - poprawa rozmiaru ortho
+- [x] opcjonalnie front-face culling w przebiegu cieni
+- [x] opcjonalnie druga mapa cieni dla reflektora latarki
 
 Gotowe gdy: brak artefaktów z typowych kątów kamery, światło nie przecieka przez obiekty.
 Zależy od: OLE-04.
