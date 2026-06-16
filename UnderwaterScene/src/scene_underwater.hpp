@@ -115,6 +115,16 @@ namespace {
     GLuint programFish   = 0;    // NED-03 pływanie ryb (A10)
     GLuint programJelly  = 0;    // NED-06 pulsujace meduzy
     GLuint programWaterOverlay = 0; // pelnoekranowy efekt wody
+    GLuint programShadowDepth  = 0; // OLE-04 przebieg cieni
+
+    // --- OLE-04: Shadow mapping (metoda obowiazkowa M4) -----------------------
+    const int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
+    GLuint shadowFBO = 0;              // framebuffer only-depth
+    GLuint shadowDepthTex = 0;         // tekstura GL_DEPTH_COMPONENT
+    float  shadowOrthoSize = 25.0f;    // polowa boku frustum ortho swiatla
+    float  shadowNear = -30.0f;        // near/far planes ortho
+    float  shadowFar  =  30.0f;
+    bool   useShadows = true;
 
     Core::RenderContext sphereContext;
     Core::RenderContext cubeContext;
@@ -267,7 +277,32 @@ inline void bindPBRMaterial(GLuint program, const PBRMaterial& material)
 // ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
-inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, const PBRMaterial& material)
+// OLE-04: wysyla uniformy cieni do aktywnego programu (lightSpaceMatrix, shadowMap, useShadows).
+inline void bindShadowUniforms(GLuint program, const glm::mat4& lightSpaceMat)
+{
+    glUniformMatrix4fv(glGetUniformLocation(program, "lightSpaceMatrix"), 1, GL_FALSE, (float*)&lightSpaceMat);
+    glUniform1i(glGetUniformLocation(program, "useShadows"), useShadows ? 1 : 0);
+    // Shadow map na texture unit 5 (0-4 zajete przez PBR mapy)
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, shadowDepthTex);
+    glUniform1i(glGetUniformLocation(program, "shadowMap"), 5);
+}
+
+// OLE-04: oblicza macierz lightSpace (ortho * view) dla swiatla kierunkowego.
+inline glm::mat4 computeLightSpaceMatrix()
+{
+    // View z perspektywy swiatla: patrzy w kierunku -sunDir z centrum sceny
+    glm::vec3 lightPos = sunDir * 15.0f; // odsuniecie od centrum
+    glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 lightProjection = glm::ortho(
+        -shadowOrthoSize, shadowOrthoSize,
+        -shadowOrthoSize, shadowOrthoSize,
+        shadowNear, shadowFar);
+    return lightProjection * lightView;
+}
+
+inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix,
+                          const PBRMaterial& material, const glm::mat4& lightSpaceMat)
 {
     glUseProgram(programPBR);
 
@@ -283,6 +318,7 @@ inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, c
     glUniform3fv(glGetUniformLocation(programPBR, "lightColor"), 1, (float*)&sunColor);
 
     bindPBRMaterial(programPBR, material);
+    bindShadowUniforms(programPBR, lightSpaceMat);
 
     glUniform3fv(glGetUniformLocation(programPBR, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programPBR, "fogDensity"), fogDensity);
@@ -294,7 +330,8 @@ inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix, c
 // NED-03 (A10): rysuje rybe z deformacja plywania w fish.vert.
 // phaseOffset pozwala desynchronizowac kilka ryb (rozne fazy machania ogonem).
 inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
-                     const PBRMaterial& material, float time, float phaseOffset)
+                     const PBRMaterial& material, float time, float phaseOffset,
+                     const glm::mat4& lightSpaceMat)
 {
     glUseProgram(programFish);
 
@@ -310,6 +347,7 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
     glUniform3fv(glGetUniformLocation(programFish, "lightColor"), 1, (float*)&sunColor);
 
     bindPBRMaterial(programFish, material);
+    bindShadowUniforms(programFish, lightSpaceMat);
 
     glUniform3fv(glGetUniformLocation(programFish, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programFish, "fogDensity"), fogDensity);
@@ -329,7 +367,8 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
 // NED-06: rysuje pulsujaca meduze (deformacja w jellyfish.vert).
 // phaseOffset desynchronizuje puls miedzy meduzami.
 inline void drawJellyfish(Core::RenderContext& context, glm::mat4 modelMatrix,
-                          const PBRMaterial& material, float time, float phaseOffset)
+                          const PBRMaterial& material, float time, float phaseOffset,
+                          const glm::mat4& lightSpaceMat)
 {
     glUseProgram(programJelly);
 
@@ -345,6 +384,7 @@ inline void drawJellyfish(Core::RenderContext& context, glm::mat4 modelMatrix,
     glUniform3fv(glGetUniformLocation(programJelly, "lightColor"), 1, (float*)&sunColor);
 
     bindPBRMaterial(programJelly, material);
+    bindShadowUniforms(programJelly, lightSpaceMat);
 
     glUniform3fv(glGetUniformLocation(programJelly, "fogColor"),  1, (float*)&waterColor);
     glUniform1f(glGetUniformLocation(programJelly, "fogDensity"), fogDensity);
@@ -477,37 +517,104 @@ inline void drawWaterOverlay(float time)
     glEnable(GL_DEPTH_TEST);
 }
 
+// OLE-04: rysuje jeden obiekt do shadow depth FBO (tylko pozycja + model).
+inline void drawShadowDepth(Core::RenderContext& context, const glm::mat4& modelMatrix,
+                            const glm::mat4& lightSpaceMat)
+{
+    glUniformMatrix4fv(glGetUniformLocation(programShadowDepth, "model"), 1, GL_FALSE, (float*)&modelMatrix);
+    glUniformMatrix4fv(glGetUniformLocation(programShadowDepth, "lightSpaceMatrix"), 1, GL_FALSE, (float*)&lightSpaceMat);
+    Core::DrawContext(context);
+}
+
 inline void renderScene(GLFWwindow* window)
 {
+    float time = (float)glfwGetTime();
+
+    // Precompute model matrices (uzywane zarowno w shadow pass jak i main pass)
+    glm::mat4 groundModel = glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(40.0f, 0.2f, 40.0f));
+    glm::mat4 sphereModel = glm::translate(glm::vec3(-1.5f, 1.0f + 0.15f * std::sin(time), 0.0f)) * glm::scale(glm::vec3(1.0f));
+    const float metalCubeScale = 0.1f;
+    glm::mat4 cubeModel = glm::translate(glm::vec3(2.0f, 1.0f + 0.1f * std::sin(time * 0.7f), 0.0f)) *
+        glm::rotate((float)time * 0.4f, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(metalCubeScale));
+
+    // OLE-04: macierz lightSpace (ortho + view z perspektywy swiatla)
+    glm::mat4 lightSpaceMat = computeLightSpaceMatrix();
+
+    // ========================================================================
+    // OLE-04: PRZEBIEG CIENI - renderowanie geometrii do FBO glebi
+    // ========================================================================
+    if (useShadows)
+    {
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        // Opcjonalnie: front-face culling w przebiegu cieni (zmniejsza peter-panning)
+        glCullFace(GL_FRONT);
+        glEnable(GL_CULL_FACE);
+
+        glUseProgram(programShadowDepth);
+
+        // Rysujemy cala geometrie sceny (te same obiekty co w main pass)
+        drawShadowDepth(groundContext, groundModel, lightSpaceMat);
+        drawShadowDepth(sphereContext, sphereModel, lightSpaceMat);
+        drawShadowDepth(cubeContext, cubeModel, lightSpaceMat);
+
+        // Ryby i meduzy tez rzucaja cienie (uzywa shadow_depth.vert z ich pozycjami)
+        if (showFish)
+        {
+            Core::RenderContext& fishMesh = (fishContext.vertexArray != 0) ? fishContext : sphereContext;
+            for (size_t i = 0; i < fishes.size(); ++i)
+                drawShadowDepth(fishMesh, fishes[i].modelMatrix(), lightSpaceMat);
+        }
+        if (showJelly && jellyContext.vertexArray != 0)
+        {
+            glm::vec3 jellyBase[3] = {
+                glm::vec3(-4.5f, 0.5f, -2.0f), glm::vec3(2.5f, 1.0f, 3.5f), glm::vec3(5.0f, 0.0f, -3.5f)
+            };
+            float jellyPhase[3] = { 0.0f, 2.1f, 4.0f };
+            float jellyScale[3] = { 1.6f, 1.2f, 2.0f };
+            const float seabedTopY = 0.0f, margin = 0.15f;
+            for (int i = 0; i < 3; ++i)
+            {
+                float ph = time * jellyParams.pulseSpeed + jellyPhase[i];
+                float bob = jellyParams.bobAmplitude * std::sin(ph);
+                float tentacleReach = jellyParams.tentacleLength * jellyScale[i];
+                float minCenterY = seabedTopY + margin + tentacleReach + jellyParams.bobAmplitude;
+                float centerY = glm::max(jellyBase[i].y, minCenterY) + bob;
+                glm::mat4 m = glm::translate(glm::vec3(jellyBase[i].x, centerY, jellyBase[i].z))
+                            * glm::scale(glm::vec3(jellyScale[i]));
+                drawShadowDepth(jellyContext, m, lightSpaceMat);
+            }
+        }
+
+        glDisable(GL_CULL_FACE);
+        glCullFace(GL_BACK); // przywroc domyslne
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // Przywroc viewport do rozmiaru okna
+        int fbW, fbH;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        glViewport(0, 0, fbW, fbH);
+    }
+
+    // ========================================================================
+    // PRZEBIEG GLOWNY - renderowanie sceny z PBR + cieniami
+    // ========================================================================
     glClearColor(waterColor.r * 0.6f, waterColor.g * 0.7f, waterColor.b * 0.8f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    float time = (float)glfwGetTime();
-
     // Sandy seabed (flat scaled cube, matte dielectric)
-    drawPBRObject(groundContext,
-        glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(40.0f, 0.2f, 40.0f)),
-        groundMaterial);
+    drawPBRObject(groundContext, groundModel, groundMaterial, lightSpaceMat);
 
-    // Dielectric test sphere (~2 m, metallic=0, roughness tweakable in ImGui)
-    drawPBRObject(sphereContext,
-        glm::translate(glm::vec3(-1.5f, 1.0f + 0.15f * std::sin(time), 0.0f)) *
-            glm::scale(glm::vec3(1.0f)),
-        sphereMaterial);
+    // Dielectric test sphere
+    drawPBRObject(sphereContext, sphereModel, sphereMaterial, lightSpaceMat);
 
-    // Metallic test cube – models/cube.obj ma 20 jednostek boku; skalujemy do ~2 m
-    const float metalCubeScale = 0.1f;
-    drawPBRObject(cubeContext,
-        glm::translate(glm::vec3(2.0f, 1.0f + 0.1f * std::sin(time * 0.7f), 0.0f)) *
-            glm::rotate((float)time * 0.4f, glm::vec3(0.0f, 1.0f, 0.0f)) *
-            glm::scale(glm::vec3(metalCubeScale)),
-        metalMaterial);
+    // Metallic test cube
+    drawPBRObject(cubeContext, cubeModel, metalMaterial, lightSpaceMat);
 
-    // --- Ryby (NED-03, A10): falowanie ciala w fish.vert ---
-    // Placeholder ciala: sphere.obj rozciagnieta wzdluz Z (elipsoida ~ ryba).
-    // Glowa przy -Z (stabilna), ogon przy +Z (macha). NED-04 wpusci je na splajn z PTF.
-    // NED-04: ryby jada po splajnach z orientacja PTF; na wierzchu animacja
-    // pływania z fish.vert (NED-03). deltaTime liczone lokalnie tutaj.
+    // --- Ryby (NED-03, A10) ---
     if (showFish)
     {
         Core::RenderContext& fishMesh = (fishContext.vertexArray != 0) ? fishContext : sphereContext;
@@ -515,8 +622,8 @@ inline void renderScene(GLFWwindow* window)
         static float fishLastTime = time;
         float dt = time - fishLastTime;
         fishLastTime = time;
-        if (dt < 0.0f) dt = 0.0f;          // zabezpieczenie
-        if (dt > 0.1f) dt = 0.1f;          // clamp przy zaciecu/debugu
+        if (dt < 0.0f) dt = 0.0f;
+        if (dt > 0.1f) dt = 0.1f;
 
         for (size_t i = 0; i < fishes.size(); ++i)
         {
@@ -525,13 +632,11 @@ inline void renderScene(GLFWwindow* window)
             PBRMaterial mat = fishMaterial;
             mat.albedo = (i < fishColors.size()) ? fishColors[i] : fishMaterial.albedo;
 
-            // modelMatrix() z ramki PTF (orientacja wzdluz krzywej) + skala instancji
-            drawFish(fishMesh, fishes[i].modelMatrix(), mat, time, fishes[i].swimPhase());
+            drawFish(fishMesh, fishes[i].modelMatrix(), mat, time, fishes[i].swimPhase(), lightSpaceMat);
         }
     }
 
-    // --- Meduzy (NED-06): pulsujacy dzwon + kolyszace sie czulki ---
-    // Pionowy bob zsynchronizowany z pulsem (kontrakcja = napped do gory).
+    // --- Meduzy (NED-06) ---
     if (showJelly && jellyContext.vertexArray != 0)
     {
         glm::vec3 jellyBase[3] = {
@@ -541,17 +646,13 @@ inline void renderScene(GLFWwindow* window)
         };
         float jellyPhase[3] = { 0.0f, 2.1f, 4.0f };
         float jellyScale[3] = { 1.6f, 1.2f, 2.0f };
-
-        // Gorna powierzchnia dna ~ y=0 (testowa kula na nim siedzi). Czulki siegaja
-        // tentacleLength*scale ponizej srodka dzwonu - pilnujemy, by najnizszy punkt
-        // przy dolnej fazie bobu nie wszedl pod dno (niezaleznie od suwakow).
         const float seabedTopY = 0.0f;
         const float margin     = 0.15f;
 
         for (int i = 0; i < 3; ++i)
         {
             float ph  = time * jellyParams.pulseSpeed + jellyPhase[i];
-            float bob = jellyParams.bobAmplitude * std::sin(ph); // synchron z pulsem
+            float bob = jellyParams.bobAmplitude * std::sin(ph);
 
             float tentacleReach = jellyParams.tentacleLength * jellyScale[i];
             float minCenterY = seabedTopY + margin + tentacleReach + jellyParams.bobAmplitude;
@@ -559,7 +660,7 @@ inline void renderScene(GLFWwindow* window)
 
             glm::mat4 m = glm::translate(glm::vec3(jellyBase[i].x, centerY, jellyBase[i].z))
                         * glm::scale(glm::vec3(jellyScale[i]));
-            drawJellyfish(jellyContext, m, jellyMaterial, time, jellyPhase[i]);
+            drawJellyfish(jellyContext, m, jellyMaterial, time, jellyPhase[i], lightSpaceMat);
         }
     }
 
@@ -678,6 +779,29 @@ inline void init(GLFWwindow* window)
 
     glEnable(GL_DEPTH_TEST);
 
+    // --- OLE-04: Shadow FBO (2048x2048, only depth) --------------------------
+    glGenFramebuffers(1, &shadowFBO);
+    glGenTextures(1, &shadowDepthTex);
+    glBindTexture(GL_TEXTURE_2D, shadowDepthTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT,
+                 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // Fragmenty poza mapa cieni nie sa w cieniu (border = 1.0)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthTex, 0);
+    glDrawBuffer(GL_NONE); // brak bufora koloru
+    glReadBuffer(GL_NONE);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ERROR::OLE-04: Shadow FBO nie jest kompletny!" << std::endl;
+    else
+        std::cout << "[OLE-04] Shadow FBO " << SHADOW_WIDTH << "x" << SHADOW_HEIGHT << " OK" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     programPBR = shaderLoader.CreateProgram(
         (char*)"shaders/pbr.vert", (char*)"shaders/pbr.frag");
     programSkybox = shaderLoader.CreateProgram(
@@ -692,6 +816,8 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/jellyfish.vert", (char*)"shaders/pbr.frag");
     programWaterOverlay = shaderLoader.CreateProgram(
         (char*)"shaders/water_overlay.vert", (char*)"shaders/water_overlay.frag");
+    programShadowDepth = shaderLoader.CreateProgram(
+        (char*)"shaders/shadow_depth.vert", (char*)"shaders/shadow_depth.frag");
 
     if (!loadModelToContext("./models/sphere.obj", sphereContext))
         std::cout << "Brak models/sphere.obj – dodaj model kuli do folderu models/" << std::endl;
@@ -863,6 +989,9 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programFish);
     shaderLoader.DeleteProgram(programJelly);
     shaderLoader.DeleteProgram(programWaterOverlay);
+    shaderLoader.DeleteProgram(programShadowDepth);  // OLE-04
+    glDeleteFramebuffers(1, &shadowFBO);              // OLE-04
+    glDeleteTextures(1, &shadowDepthTex);             // OLE-04
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
     glDeleteVertexArrays(1, &splineBVAO);
@@ -924,6 +1053,10 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::ColorEdit3("Water color", (float*)&waterColor);
         ImGui::ColorEdit3("Sun color",   (float*)&sunColor);
         ImGui::SliderFloat3("Sun dir",   (float*)&sunDir, -1.0f, 1.0f);
+        ImGui::Separator();
+        ImGui::Text("OLE-04 Shadow mapping (M4)");
+        ImGui::Checkbox("Cienie wlaczone", &useShadows);
+        ImGui::SliderFloat("Shadow ortho size", &shadowOrthoSize, 5.0f, 60.0f);
         ImGui::Separator();
         ImGui::Text("OLE-01 PBR (kula - uniformy)");
         ImGui::ColorEdit3("Albedo", (float*)&sphereMaterial.albedo);
