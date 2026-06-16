@@ -116,6 +116,22 @@ namespace {
     GLuint programJelly  = 0;    // NED-06 pulsujace meduzy
     GLuint programWaterOverlay = 0; // pelnoekranowy efekt wody
     GLuint programShadowDepth  = 0; // OLE-04 przebieg cieni
+    GLuint programPostprocess  = 0; // OLE-07 post-processing podwodny
+
+    // --- OLE-07: Post-processing FBO (kolor + glebia) -------------------------
+    GLuint sceneFBO = 0;
+    GLuint sceneColorTex = 0;
+    GLuint sceneDepthTex = 0;
+    int    sceneFBOWidth = 0, sceneFBOHeight = 0;
+    bool   usePostprocess = true;
+    // Parametry post-processingu
+    glm::vec3 ppTint         = glm::vec3(0.6f, 0.85f, 0.95f); // niebiesko-zielony tint
+    float     ppTintStrength = 0.35f;
+    float     ppDepthFogDensity = 0.08f;
+    float     ppDepthFogStart   = 1.0f;
+    glm::vec3 ppDepthFogColor   = glm::vec3(0.04f, 0.18f, 0.28f);
+    float     ppChromaticStrength = 0.003f;
+    float     ppVignetteStrength  = 0.4f;
 
     // --- OLE-04: Shadow mapping (metoda obowiazkowa M4) -----------------------
     const int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
@@ -711,6 +727,14 @@ inline void renderScene(GLFWwindow* window)
     }
 
     // ========================================================================
+    // PRZEBIEG GLOWNY - renderowanie sceny do FBO posredniego (OLE-07)
+    // ========================================================================
+    if (usePostprocess && sceneFBO != 0)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, sceneFBO);
+    }
+
+    // ========================================================================
     // PRZEBIEG GLOWNY - renderowanie sceny z PBR + cieniami
     // ========================================================================
     glClearColor(waterColor.r * 0.6f, waterColor.g * 0.7f, waterColor.b * 0.8f, 1.0f);
@@ -786,6 +810,49 @@ inline void renderScene(GLFWwindow* window)
 
     // Pelnoekranowy efekt wody na samym wierzchu (po skyboxie i geometrii)
     drawWaterOverlay(time);
+
+    // ========================================================================
+    // OLE-07: PRZEBIEG POST-PROCESSINGU - efekty podwodne
+    // ========================================================================
+    if (usePostprocess && sceneFBO != 0)
+    {
+        // Przywroc domyslny framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glDisable(GL_DEPTH_TEST);
+        glUseProgram(programPostprocess);
+
+        // Tekstury sceny
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneColorTex);
+        glUniform1i(glGetUniformLocation(programPostprocess, "screenTexture"), 0);
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, sceneDepthTex);
+        glUniform1i(glGetUniformLocation(programPostprocess, "depthTexture"), 1);
+
+        // Parametry
+        glUniform3fv(glGetUniformLocation(programPostprocess, "underwaterTint"), 1, (float*)&ppTint);
+        glUniform1f(glGetUniformLocation(programPostprocess, "tintStrength"), ppTintStrength);
+        glUniform1f(glGetUniformLocation(programPostprocess, "depthFogDensity"), ppDepthFogDensity);
+        glUniform1f(glGetUniformLocation(programPostprocess, "depthFogStart"), ppDepthFogStart);
+        glUniform3fv(glGetUniformLocation(programPostprocess, "depthFogColor"), 1, (float*)&ppDepthFogColor);
+        glUniform1f(glGetUniformLocation(programPostprocess, "nearPlane"), 0.05f);
+        glUniform1f(glGetUniformLocation(programPostprocess, "farPlane"), 200.0f);
+        glUniform1f(glGetUniformLocation(programPostprocess, "chromaticStrength"), ppChromaticStrength);
+        glUniform1f(glGetUniformLocation(programPostprocess, "vignetteStrength"), ppVignetteStrength);
+        glUniform1f(glGetUniformLocation(programPostprocess, "time"), time);
+
+        // Rysuj fullscreen quad (uzywa tego samego VAO co water overlay)
+        glBindVertexArray(waterQuadVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+
+        glUseProgram(0);
+        glEnable(GL_DEPTH_TEST);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -806,12 +873,62 @@ inline bool loadModelToContext(const std::string& path, Core::RenderContext& con
 }
 
 // ---------------------------------------------------------------------------
+// OLE-07: tworzenie/resize FBO sceny (kolor + glebia)
+// ---------------------------------------------------------------------------
+inline void createOrResizeSceneFBO(int width, int height)
+{
+    if (width <= 0 || height <= 0) return;
+    if (width == sceneFBOWidth && height == sceneFBOHeight && sceneFBO != 0) return;
+
+    // Usun stare zasoby
+    if (sceneFBO != 0)
+    {
+        glDeleteFramebuffers(1, &sceneFBO);
+        glDeleteTextures(1, &sceneColorTex);
+        glDeleteTextures(1, &sceneDepthTex);
+    }
+
+    sceneFBOWidth = width;
+    sceneFBOHeight = height;
+
+    glGenFramebuffers(1, &sceneFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, sceneFBO);
+
+    // Tekstura koloru (RGB16F dla HDR)
+    glGenTextures(1, &sceneColorTex);
+    glBindTexture(GL_TEXTURE_2D, sceneColorTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneColorTex, 0);
+
+    // Tekstura glebi
+    glGenTextures(1, &sceneDepthTex);
+    glBindTexture(GL_TEXTURE_2D, sceneDepthTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTex, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ERROR::OLE-07: Scene FBO nie jest kompletny!" << std::endl;
+    else
+        std::cout << "[OLE-07] Scene FBO " << width << "x" << height << " OK" << std::endl;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// ---------------------------------------------------------------------------
 // Input callbacks
 // ---------------------------------------------------------------------------
 inline void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     aspectRatio = height > 0 ? width / (float)height : 1.0f;
     glViewport(0, 0, width, height);
+    // OLE-07: resize FBO sceny
+    createOrResizeSceneFBO(width, height);
 }
 
 inline void mouse_callback(GLFWwindow* window, double xpos, double ypos)
@@ -929,6 +1046,8 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/water_overlay.vert", (char*)"shaders/water_overlay.frag");
     programShadowDepth = shaderLoader.CreateProgram(
         (char*)"shaders/shadow_depth.vert", (char*)"shaders/shadow_depth.frag");
+    programPostprocess = shaderLoader.CreateProgram(
+        (char*)"shaders/postprocess.vert", (char*)"shaders/postprocess.frag");
 
     if (!loadModelToContext("./models/sphere.obj", sphereContext))
         std::cout << "Brak models/sphere.obj – dodaj model kuli do folderu models/" << std::endl;
@@ -1101,8 +1220,16 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programJelly);
     shaderLoader.DeleteProgram(programWaterOverlay);
     shaderLoader.DeleteProgram(programShadowDepth);  // OLE-04
+    shaderLoader.DeleteProgram(programPostprocess);   // OLE-07
     glDeleteFramebuffers(1, &shadowFBO);              // OLE-04
     glDeleteTextures(1, &shadowDepthTex);             // OLE-04
+    // OLE-07: scene FBO
+    if (sceneFBO != 0)
+    {
+        glDeleteFramebuffers(1, &sceneFBO);
+        glDeleteTextures(1, &sceneColorTex);
+        glDeleteTextures(1, &sceneDepthTex);
+    }
     glDeleteVertexArrays(1, &splineVAO);
     glDeleteBuffers(1, &splineVBO);
     glDeleteVertexArrays(1, &splineBVAO);
@@ -1206,6 +1333,16 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::ColorEdit3("Bio 2 (zielony)",   (float*)&bioColors[1]);
         ImGui::ColorEdit3("Bio 3 (fioletowy)", (float*)&bioColors[2]);
         ImGui::Text("Aktywne: %d point, %d spot", numPointLights, numSpotLights);
+        ImGui::Separator();
+        ImGui::Text("OLE-07 Post-processing podwodny");
+        ImGui::Checkbox("Post-processing wlaczony", &usePostprocess);
+        ImGui::ColorEdit3("Tint podwodny", (float*)&ppTint);
+        ImGui::SliderFloat("Sila tintu", &ppTintStrength, 0.0f, 1.0f);
+        ImGui::SliderFloat("Mgla glebi - gestosc", &ppDepthFogDensity, 0.0f, 0.5f);
+        ImGui::SliderFloat("Mgla glebi - start", &ppDepthFogStart, 0.0f, 20.0f);
+        ImGui::ColorEdit3("Kolor mgly glebi", (float*)&ppDepthFogColor);
+        ImGui::SliderFloat("Aberracja chromatyczna", &ppChromaticStrength, 0.0f, 0.02f, "%.4f");
+        ImGui::SliderFloat("Vignette", &ppVignetteStrength, 0.0f, 1.5f);
         ImGui::PopItemWidth();
         ImGui::End();
 
