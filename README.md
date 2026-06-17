@@ -52,20 +52,26 @@ wybierz v143. Więcej w BUILD.md.
 
 ## Sterowanie
 
-Docelowo (jak już będą gotowe wszystkie metody):
+Pływanie:
 
-- `WSAD` - ruch
-- `Spacja` / `Lewy Shift` - góra / dół
+- `WSAD` - ruch (tam, gdzie patrzysz)
 - mysz - rozglądanie
-- `Q` / `E` - przechył
-- `F` - latarka on/off
-- `C` - zmiana koloru latarki
-- `+` / `-` lub scroll - jasność latarki
-- `E` / lewy klik - straszenie ryb
-- `B` - bioluminescencja on/off
+- `Q` / `E` - przechył (roll)
+- `Spacja` / `Lewy Ctrl` - w górę / w dół
+- `Lewy Shift` - przyspieszenie
 
-W obecnym szkielecie działa na razie tyle: `WSAD` + mysz do pływania, `Spacja`/`Lewy Ctrl`
-góra-dół, `Lewy Shift` przyspieszenie, `Caps Lock` przełącza panel ImGui, `Esc` wyjście.
+Interakcje:
+
+- `F` - latarka on/off
+- `C` - zmiana koloru latarki (biały / ciepły / chłodny)
+- `+` / `-` lub scroll - jasność latarki
+- `B` - bioluminescencja on/off
+- lewy klik - straszenie ryb w pobliżu
+
+Reszta:
+
+- `Caps Lock` - przełącza panel ImGui (suwaki materiałów, świateł, mgły itd.)
+- `Esc` - wyjście
 
 ## Struktura projektu
 

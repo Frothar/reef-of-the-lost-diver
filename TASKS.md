@@ -311,7 +311,7 @@ Gotowe: latarka oświetla obiekty stożkiem jadącym z kamerą, F/C/+/-/scroll d
 Zależy od: MRZ-02, OLE-05.
 Materiały: [LearnOpenGL Light Casters](https://learnopengl.com/Lighting/Light-casters).
 
-## MRZ-06 (P1) Interakcje (~3h) - tydzień 3 - MIN. 3 WYMAGANE
+## MRZ-06 (DONE) Interakcje (~3h) - tydzień 3 - MIN. 3 WYMAGANE
 
 - [x] latarka on/off (F) - część MRZ-05
 - [x] zmiana koloru latarki (C) - część MRZ-05
@@ -319,8 +319,8 @@ Materiały: [LearnOpenGL Light Casters](https://learnopengl.com/Lighting/Light-c
 - [x] straszenie ryb (lewy klik - E zajęte przez roll kamery): ryby w promieniu smigają szybciej
       (mnożnik prędkości na splajnie) i machają ogonem jak szalone, reset po 3 s
 - [x] bioluminescencja on/off (B) - część MRZ-05
-- [x] rejestracja callbacków klawiszy w GLFW (key + scroll)
-- [ ] spisanie sterowania do README
+- [x] rejestracja callbacków klawiszy w GLFW (key + scroll + mouse button)
+- [x] spisanie sterowania do README
 
 Już mamy 4 działające interakcje (F/C/jasność/B) - minimum 3 spełnione. Zostaje straszenie ryb.
 Gotowe gdy: min. 3 interakcje da się pokazać, każda daje widoczny efekt od razu, sterowanie intuicyjne.
@@ -341,17 +341,19 @@ Rysowane po skyboxie, przed overlayem wody. Toggle + kolor w panelu ImGui.
 
 Zależy od: MRZ-02.
 
-## MRZ-08 (P2) Sklejenie całości + README (~5h) - tydzień 3-4
+## MRZ-08 (w trakcie) Sklejenie całości + README (~5h) - tydzień 3-4
 
-- [ ] kolejność w pętli: czas/deltaTime → input → animacje → przebieg cieni → przebieg główny
-      (skybox, scena, ryby, cząstki) → ewentualny post-processing → swap buffers
-- [ ] wszystkie uniformy co klatkę (kamera, światła, mapa cieni, czas)
-- [ ] obsługa resize okna (aktualizacja projekcji)
-- [ ] README: sterowanie, metody, instrukcja, screeny
-- [ ] wypchnięcie finalnej wersji na GitHub
+- [x] kolejność w pętli: czas/deltaTime → input → animacje → przebieg cieni → przebieg główny
+      (skybox, scena, ryby, bąbelki) → post-processing → swap buffers
+- [x] wszystkie uniformy co klatkę (kamera, światła, mapa cieni, czas)
+- [x] obsługa resize okna (aktualizacja projekcji) - `framebuffer_size_callback`
+- [x] README: sterowanie, metody, instrukcja
+- [ ] README: screeny (do zrobienia pod koniec, jak scena będzie finalna)
+- [ ] wypchnięcie finalnej wersji na GitHub (na koniec projektu)
 
-Gotowe gdy: wszystko działa razem bez wywałek, stabilne 30+ FPS, brak problemów z kolejnością
-renderowania (skybox za wszystkim, przezroczyste na końcu), README pozwala komuś nowemu zbudować i odpalić.
+Zostają screeny i finalny push - to robimy pod sam koniec. Reszta sklejona: wszystko renderuje
+się razem bez wywałek, kolejność OK (skybox za wszystkim, bąbelki przezroczyste po skyboxie).
+Gotowe gdy: wszystko działa razem, README pozwala komuś nowemu zbudować i odpalić.
 
 Zależy od: wszystkich zadań P0 i P1.
 
