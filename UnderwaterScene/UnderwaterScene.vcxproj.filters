@@ -48,6 +48,7 @@
   <ItemGroup>
     <ClInclude Include="src\scene_underwater.hpp"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\QuaternionCamera.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="src\ParticleSystem.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Spline.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\FishAnimation.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="src\Box.cpp"><Filter>Header</Filter></ClInclude>
@@ -73,6 +74,8 @@
     <None Include="shaders\debug_line.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\debug_line.frag"><Filter>Shaders</Filter></None>
     <None Include="shaders\fish.vert"><Filter>Shaders</Filter></None>
+    <None Include="shaders\particle.vert"><Filter>Shaders</Filter></None>
+    <None Include="shaders\particle.frag"><Filter>Shaders</Filter></None>
     <None Include="shaders\jellyfish.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\water_overlay.vert"><Filter>Shaders</Filter></None>
     <None Include="shaders\water_overlay.frag"><Filter>Shaders</Filter></None>
