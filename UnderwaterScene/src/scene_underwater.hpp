@@ -28,6 +28,7 @@
 #include "Texture.h"
 #include "Camera.h"               // Core::createPerspectiveMatrix
 #include "QuaternionCamera.h"     // MRZ-02 quaternion camera
+#include "ParticleSystem.h"       // MRZ-07 babelki
 #include "Spline.h"               // NED-01 splajn Catmull-Rom
 #include "FishAnimation.h"        // NED-04 ryby po splajnie z PTF
 
@@ -176,6 +177,12 @@ namespace {
     GLuint waterQuadVAO = 0, waterQuadVBO = 0;
     bool   showWaterOverlay = true;
     float  waterOverlayStrength = 0.7f;
+
+    // --- MRZ-07: babelki -----------------------------------------------------
+    GLuint       programParticle = 0;
+    BubbleSystem bubbles;
+    bool         showBubbles = true;
+    glm::vec3    bubbleColor = glm::vec3(0.75f, 0.88f, 0.95f);
 
     float aspectRatio = 1.0f;
 
@@ -631,6 +638,42 @@ inline void drawWaterOverlay(float time)
     glEnable(GL_DEPTH_TEST);
 }
 
+// MRZ-07: rysuje babelki (point sprites) z blendingiem, bez zapisu glebi.
+inline void drawBubbles(GLFWwindow* window, float time)
+{
+    if (!showBubbles) return;
+
+    static float lastTime = time;
+    float dt = time - lastTime;
+    lastTime = time;
+    if (dt < 0.0f) dt = 0.0f;
+    if (dt > 0.1f) dt = 0.1f;
+    bubbles.update(dt);
+
+    int fbW, fbH;
+    glfwGetFramebufferSize(window, &fbW, &fbH);
+
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE); // babelki nie zapisuja glebi (nie zaslaniaja sie twardo)
+
+    glUseProgram(programParticle);
+    glm::mat4 view = createCameraMatrix();
+    glm::mat4 proj = createPerspectiveMatrix();
+    glUniformMatrix4fv(glGetUniformLocation(programParticle, "view"), 1, GL_FALSE, (float*)&view);
+    glUniformMatrix4fv(glGetUniformLocation(programParticle, "projection"), 1, GL_FALSE, (float*)&proj);
+    glUniform1f(glGetUniformLocation(programParticle, "sizeScale"), (float)fbH * 0.02f);
+    glUniform3fv(glGetUniformLocation(programParticle, "bubbleColor"), 1, (float*)&bubbleColor);
+
+    bubbles.draw();
+
+    glUseProgram(0);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_PROGRAM_POINT_SIZE);
+}
+
 // OLE-04: rysuje jeden obiekt do shadow depth FBO (tylko pozycja + model).
 inline void drawShadowDepth(Core::RenderContext& context, const glm::mat4& modelMatrix,
                             const glm::mat4& lightSpaceMat)
@@ -836,6 +879,9 @@ inline void renderScene(GLFWwindow* window)
 
     // Skybox last (depth trick keeps it behind everything)
     drawSkybox(time);
+
+    // MRZ-07: babelki (po skyboxie, przed overlayem wody)
+    drawBubbles(window, time);
 
     // Pelnoekranowy efekt wody na samym wierzchu (po skyboxie i geometrii)
     drawWaterOverlay(time);
@@ -1102,6 +1148,19 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/shadow_depth.vert", (char*)"shaders/shadow_depth.frag");
     programPostprocess = shaderLoader.CreateProgram(
         (char*)"shaders/postprocess.vert", (char*)"shaders/postprocess.frag");
+    programParticle = shaderLoader.CreateProgram(
+        (char*)"shaders/particle.vert", (char*)"shaders/particle.frag");
+
+    // MRZ-07: babelki - emitery przy dnie (kominy/wybicia z piasku)
+    {
+        std::vector<glm::vec3> bubbleEmitters = {
+            glm::vec3(-5.0f, -1.8f, -3.0f),
+            glm::vec3( 3.0f, -1.8f,  2.0f),
+            glm::vec3( 0.0f, -1.8f, -6.0f),
+            glm::vec3( 6.0f, -1.8f,  4.0f),
+        };
+        bubbles.init(160, bubbleEmitters);
+    }
 
     if (!loadModelToContext("./models/sphere.obj", sphereContext))
         std::cout << "Brak models/sphere.obj – dodaj model kuli do folderu models/" << std::endl;
@@ -1394,6 +1453,10 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::ColorEdit3("Bio 2 (zielony)",   (float*)&bioColors[1]);
         ImGui::ColorEdit3("Bio 3 (fioletowy)", (float*)&bioColors[2]);
         ImGui::Text("Aktywne: %d point, %d spot", numPointLights, numSpotLights);
+        ImGui::Separator();
+        ImGui::Text("MRZ-07 Babelki");
+        ImGui::Checkbox("Babelki", &showBubbles);
+        ImGui::ColorEdit3("Kolor babelkow", (float*)&bubbleColor);
         ImGui::Separator();
         ImGui::Text("OLE-07 Post-processing podwodny");
         ImGui::Checkbox("Post-processing wlaczony", &usePostprocess);

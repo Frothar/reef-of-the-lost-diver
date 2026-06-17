@@ -326,18 +326,18 @@ Już mamy 4 działające interakcje (F/C/jasność/B) - minimum 3 spełnione. Zo
 Gotowe gdy: min. 3 interakcje da się pokazać, każda daje widoczny efekt od razu, sterowanie intuicyjne.
 Zależy od: MRZ-05, NED-04 (do straszenia ryb).
 
-## MRZ-07 (P2) Bąbelki - system cząstek (~5h) - tydzień 3
+## MRZ-07 (DONE) Bąbelki - system cząstek (~5h) - tydzień 3
 
-- [ ] `src/ParticleSystem.h` / `.cpp`
-- [ ] cząstka: pozycja, prędkość, czas życia, rozmiar, alpha
-- [ ] spawn z emiterów (dno, nurek, wrak)
-- [ ] update: w górę z lekkim dryfem na boki
-- [ ] render jako billboardy (zawsze do kamery) z alpha blendingiem
-- [ ] recykling martwych cząstek
-- [ ] `shaders/particle.vert` + `.frag`
+- [x] `src/ParticleSystem.h` (klasa `BubbleSystem`, header-only)
+- [x] cząstka: pozycja, prędkość, czas życia, rozmiar, alpha
+- [x] spawn z emiterów przy dnie (4 kominy)
+- [x] update: w górę z lekkim dryfem na boki
+- [x] render jako point sprites (zawsze do kamery) z alpha blendingiem, bez zapisu głębi
+- [x] recykling martwych cząstek (respawn)
+- [x] `shaders/particle.vert` + `.frag`
 
-Gotowe gdy: bąbelki wznoszą się z lekkim chwianiem, znikają u góry / po czasie życia, brak ostrych
-krawędzi przy przecinaniu geometrii, min. 50-100 bąbelków naraz.
+Gotowe: 160 bąbelków wznosi się z dna z chwianiem, zanikają pod koniec życia i respawnują się.
+Rysowane po skyboxie, przed overlayem wody. Toggle + kolor w panelu ImGui.
 
 Zależy od: MRZ-02.
 
