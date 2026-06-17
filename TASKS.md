@@ -295,34 +295,34 @@ może użyć tego samego rysowania z innym shaderem.
 
 Zależy od: MRZ-03 i znalezionych modeli (ALL-01).
 
-## MRZ-05 (P1) Ruchome światła i latarka - B13 (~5h) - tydzień 2 - TO JEST METODA B13 (15 pkt)
+## MRZ-05 (DONE) Ruchome światła i latarka - B13 (~5h) - tydzień 2 - TO JEST METODA B13 (15 pkt)
 
-- [ ] `src/Light.h` / `.cpp`
-- [ ] struktury `DirLight`, `PointLight`, `SpotLight` (zgodne z uniformami shadera)
-- [ ] latarka nurka (reflektor): przyczepiona do kamery (pozycja + kierunek), F włącza/wyłącza,
+- [x] struktury świateł `PointLightCPU` / `SpotLightCPU` + DirLight w shaderze (struktury siedzą
+      w `scene_underwater.hpp`, dorobione przy integracji OLE-05 - osobny `Light.h` niepotrzebny)
+- [x] latarka nurka (reflektor): przyczepiona do kamery (pozycja + kierunek), F włącza/wyłącza,
       C zmienia kolor (biały → ciepły → chłodny niebieski), +/- albo scroll zmienia jasność
-- [ ] światła bioluminescencji (2-4): pozycja dryfuje `sin(time)`, jasność pulsuje
-      `sin(time * pulseSpeed)`, kolory miękkie niebieski/zielony/fioletowy, B włącza/wyłącza
-- [ ] wysyłanie danych świateł do shadera co klatkę
+- [x] światła bioluminescencji (3): pozycja dryfuje `sin(time)`, jasność pulsuje
+      `sin(time * pulseSpeed)`, kolory niebieski/zielony/fioletowy, B włącza/wyłącza
+- [x] wysyłanie danych świateł do shadera co klatkę (point + spot)
 
-Gotowe gdy: latarka oświetla obiekty widocznym stożkiem jadącym za kamerą, włączanie/wyłączanie
-widoczne, bioluminescencja świeci i pulsuje rzucając kolorowe światło, min. jedno światło zawsze
-się rusza/pulsuje.
+Gotowe: latarka oświetla obiekty stożkiem jadącym z kamerą, F/C/+/-/scroll działają, bioluminescencja
+świeci i pulsuje. Wykorzystany gotowy spotlight z OLE-05 (wcześniej `numSpotLights` było 0).
 
 Zależy od: MRZ-02, OLE-05.
 Materiały: [LearnOpenGL Light Casters](https://learnopengl.com/Lighting/Light-casters).
 
 ## MRZ-06 (P1) Interakcje (~3h) - tydzień 3 - MIN. 3 WYMAGANE
 
-- [ ] latarka on/off (F) - część MRZ-05
-- [ ] zmiana koloru latarki (C) - część MRZ-05
-- [ ] jasność latarki (+/- albo scroll) - część MRZ-05
+- [x] latarka on/off (F) - część MRZ-05
+- [x] zmiana koloru latarki (C) - część MRZ-05
+- [x] jasność latarki (+/- albo scroll) - część MRZ-05
 - [ ] straszenie ryb (E albo lewy klik): znajdź ryby w promieniu od kamery, przyspiesz ich animację
       (waveSpeed), odsuń od kamery, po kilku sekundach reset
-- [ ] bioluminescencja on/off (B) - część MRZ-05
-- [ ] rejestracja callbacków klawiszy w GLFW
+- [x] bioluminescencja on/off (B) - część MRZ-05
+- [x] rejestracja callbacków klawiszy w GLFW (key + scroll)
 - [ ] spisanie sterowania do README
 
+Już mamy 4 działające interakcje (F/C/jasność/B) - minimum 3 spełnione. Zostaje straszenie ryb.
 Gotowe gdy: min. 3 interakcje da się pokazać, każda daje widoczny efekt od razu, sterowanie intuicyjne.
 Zależy od: MRZ-05, NED-04 (do straszenia ryb).
 

@@ -246,6 +246,19 @@ namespace {
     float bioIntensity = 3.0f;
     float bioPulseSpeed = 1.5f;
 
+    // --- MRZ-05 (B13): latarka nurka -----------------------------------------
+    // Reflektor (spotlight) przyczepiony do kamery: pozycja = pozycja kamery,
+    // kierunek = front kamery. Wlaczana F, kolor cyklowany C, jasnosc +/- / scroll.
+    bool  headlampOn = true;
+    int   headlampColorIdx = 0;
+    glm::vec3 headlampColors[3] = {
+        glm::vec3(1.00f, 1.00f, 1.00f),   // bialy
+        glm::vec3(1.00f, 0.82f, 0.55f),   // cieply (zolty)
+        glm::vec3(0.55f, 0.78f, 1.00f),   // chlodny (niebieski)
+    };
+    const char* headlampColorNames[3] = { "bialy", "cieply", "chlodny" };
+    float headlampIntensity = 9.0f;
+
     // NED-03 (A10): animacja ryb (domyslne dostrojone do modelu models/fish.obj)
     FishParams  fishParams;
     PBRMaterial fishMaterial = { glm::vec3(0.30f, 0.55f, 0.75f), 0.1f, 0.45f }; // srebrzysto-niebieska
@@ -657,6 +670,22 @@ inline void renderScene(GLFWwindow* window)
         }
     }
 
+    // --- MRZ-05 (B13): latarka nurka - spotlight jadacy z kamera --------------
+    if (headlampOn && numSpotLights < MAX_SPOT_LIGHTS)
+    {
+        SpotLightCPU& sl = spotLights[numSpotLights];
+        sl.position    = camera.position;
+        sl.direction   = camera.front();
+        sl.color       = headlampColors[headlampColorIdx];
+        sl.intensity   = headlampIntensity;
+        sl.constant    = 1.0f;
+        sl.linear      = 0.09f;
+        sl.quadratic   = 0.032f;
+        sl.innerCutoff = glm::cos(glm::radians(15.0f));
+        sl.outerCutoff = glm::cos(glm::radians(23.0f));
+        ++numSpotLights;
+    }
+
     // Precompute model matrices (uzywane zarowno w shadow pass jak i main pass)
     glm::mat4 groundModel = glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(40.0f, 0.2f, 40.0f));
     glm::mat4 sphereModel = glm::translate(glm::vec3(-1.5f, 1.0f + 0.15f * std::sin(time), 0.0f)) * glm::scale(glm::vec3(1.0f));
@@ -959,6 +988,22 @@ inline void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     // Caps Lock: ręczne przełączenie trybu rozglądania (opcjonalne – panel działa też bez tego).
     if (key == GLFW_KEY_CAPS_LOCK && action == GLFW_PRESS)
         mouseLook = !mouseLook;
+
+    // Interakcje (MRZ-06) - tylko gdy nie piszemy w polu ImGui.
+    if (action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard)
+    {
+        if (key == GLFW_KEY_F) headlampOn = !headlampOn;                       // latarka on/off
+        if (key == GLFW_KEY_C) headlampColorIdx = (headlampColorIdx + 1) % 3;  // kolor latarki
+        if (key == GLFW_KEY_B) showBioLights = !showBioLights;                 // bioluminescencja
+    }
+}
+
+inline void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+    if (ImGui::GetIO().WantCaptureMouse) return;
+    // MRZ-05: scroll = jasnosc latarki (alternatywa dla +/-)
+    headlampIntensity = glm::clamp(headlampIntensity + (float)yoffset * 0.6f, 0.0f, 30.0f);
 }
 
 inline void updateCursorMode(GLFWwindow* window)
@@ -993,6 +1038,14 @@ inline void processInput(GLFWwindow* window)
     // przechyl (roll)
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) camera.addRoll(roll);
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) camera.addRoll(-roll);
+
+    // MRZ-05: jasnosc latarki na +/- (alternatywa: scroll)
+    float lampStep = 12.0f * dt;
+    if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS)
+        headlampIntensity += lampStep;
+    if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS)
+        headlampIntensity -= lampStep;
+    headlampIntensity = glm::clamp(headlampIntensity, 0.0f, 30.0f);
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,6 +1056,7 @@ inline void init(GLFWwindow* window)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     glEnable(GL_DEPTH_TEST);
@@ -1325,8 +1379,15 @@ inline void renderLoop(GLFWwindow* window)
         }
         ImGui::TextDisabled("Wlacz/wylacz aby porownac plaski vs wyboje");
         ImGui::Separator();
+        ImGui::Text("MRZ-05 Latarka nurka (B13)");
+        ImGui::Checkbox("Latarka [F]", &headlampOn);
+        if (ImGui::Button("Kolor [C]")) headlampColorIdx = (headlampColorIdx + 1) % 3;
+        ImGui::SameLine();
+        ImGui::Text("%s", headlampColorNames[headlampColorIdx]);
+        ImGui::SliderFloat("Jasnosc [+/- / scroll]", &headlampIntensity, 0.0f, 30.0f);
+        ImGui::Separator();
         ImGui::Text("OLE-05 Wiele swiatel");
-        ImGui::Checkbox("Bioluminescencja (3 point lights)", &showBioLights);
+        ImGui::Checkbox("Bioluminescencja [B] (3 point lights)", &showBioLights);
         ImGui::SliderFloat("Bio intensywnosc", &bioIntensity, 0.0f, 10.0f);
         ImGui::SliderFloat("Bio pulsowanie", &bioPulseSpeed, 0.0f, 5.0f);
         ImGui::ColorEdit3("Bio 1 (niebieski)", (float*)&bioColors[0]);
