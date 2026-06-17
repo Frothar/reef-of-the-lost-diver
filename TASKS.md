@@ -348,7 +348,7 @@ Zależy od: MRZ-02.
 - [x] wszystkie uniformy co klatkę (kamera, światła, mapa cieni, czas)
 - [x] obsługa resize okna (aktualizacja projekcji) - `framebuffer_size_callback`
 - [x] README: sterowanie, metody, instrukcja
-- [ ] README: screeny (do zrobienia pod koniec, jak scena będzie finalna)
+- [x] README: screeny (scene_overview, materials_shadows, ui_panel) - można odświeżyć gdy scena finalna
 - [ ] wypchnięcie finalnej wersji na GitHub (na koniec projektu)
 
 Zostają screeny i finalny push - to robimy pod sam koniec. Reszta sklejona: wszystko renderuje

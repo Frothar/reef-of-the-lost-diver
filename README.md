@@ -70,8 +70,23 @@ Interakcje:
 
 Reszta:
 
-- `Caps Lock` - przełącza panel ImGui (suwaki materiałów, świateł, mgły itd.)
+- `Caps Lock` - przełącza tryb myszy (rozglądanie ↔ kursor do klikania w panel)
+- `H` - pokaż / ukryj panel ImGui (suwaki materiałów, świateł, mgły itd.)
 - `Esc` - wyjście
+
+## Zrzuty ekranu
+
+![Ogólny widok sceny](UnderwaterScene/screenshots/scene_overview.png)
+
+*Ogólny widok: dno, meduzy, bioluminescencja, splajn ryb i mgła głębi.*
+
+![Cienie i materiały](UnderwaterScene/screenshots/materials_shadows.png)
+
+*Cień kuli na dnie (shadow mapping) i zardzewiały metal (PBR + normal mapping).*
+
+![Panel sterowania](UnderwaterScene/screenshots/ui_panel.png)
+
+*Panel ImGui z parametrami świateł, mgły, materiałów i ryb.*
 
 ## Struktura projektu
 
