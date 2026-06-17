@@ -34,6 +34,7 @@
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\objload.h" />
     <ClInclude Include="src\QuaternionCamera.h" />
+    <ClInclude Include="src\ParticleSystem.h" />
     <ClInclude Include="src\Render_Utils.h" />
     <ClInclude Include="src\scene_underwater.hpp" />
     <ClInclude Include="src\Shader_Loader.h" />
@@ -60,6 +61,8 @@
     <None Include="shaders\jellyfish.vert" />
     <None Include="shaders\water_overlay.frag" />
     <None Include="shaders\water_overlay.vert" />
+    <None Include="shaders\particle.frag" />
+    <None Include="shaders\particle.vert" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{7A1D9C42-3E8B-4F26-9A11-5D7C2E4B8A90}</ProjectGuid>
