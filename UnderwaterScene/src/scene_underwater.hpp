@@ -193,6 +193,7 @@ namespace {
     bool  firstMouse = true;
     float lastX = 500.0f, lastY = 500.0f;
     bool  mouseLook = true;
+    bool  showPanel = true;   // H: pokaz/ukryj panel ImGui (czysty widok na demo / screeny)
 
     // --- Lighting / atmosphere (tweakable in the ImGui panel) ----------------
     glm::vec3 sunDir     = glm::normalize(glm::vec3(0.3f, 1.0f, 0.2f)); // light from above
@@ -1057,6 +1058,7 @@ inline void key_callback(GLFWwindow* window, int key, int scancode, int action, 
         if (key == GLFW_KEY_F) headlampOn = !headlampOn;                       // latarka on/off
         if (key == GLFW_KEY_C) headlampColorIdx = (headlampColorIdx + 1) % 3;  // kolor latarki
         if (key == GLFW_KEY_B) showBioLights = !showBioLights;                 // bioluminescencja
+        if (key == GLFW_KEY_H) showPanel = !showPanel;                         // pokaz/ukryj panel
     }
 }
 
@@ -1398,6 +1400,7 @@ inline void renderLoop(GLFWwindow* window)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        if (showPanel) {
         ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("WSAD ruch, Q/E przechyl, Spacja/Ctrl gora-dol");
@@ -1501,6 +1504,7 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::SliderFloat("Vignette", &ppVignetteStrength, 0.0f, 1.5f);
         ImGui::PopItemWidth();
         ImGui::End();
+        }
 
         updateCursorMode(window);
 
