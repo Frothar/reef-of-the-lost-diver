@@ -316,8 +316,8 @@ Materiały: [LearnOpenGL Light Casters](https://learnopengl.com/Lighting/Light-c
 - [x] latarka on/off (F) - część MRZ-05
 - [x] zmiana koloru latarki (C) - część MRZ-05
 - [x] jasność latarki (+/- albo scroll) - część MRZ-05
-- [ ] straszenie ryb (E albo lewy klik): znajdź ryby w promieniu od kamery, przyspiesz ich animację
-      (waveSpeed), odsuń od kamery, po kilku sekundach reset
+- [x] straszenie ryb (lewy klik - E zajęte przez roll kamery): ryby w promieniu smigają szybciej
+      (mnożnik prędkości na splajnie) i machają ogonem jak szalone, reset po 3 s
 - [x] bioluminescencja on/off (B) - część MRZ-05
 - [x] rejestracja callbacków klawiszy w GLFW (key + scroll)
 - [ ] spisanie sterowania do README

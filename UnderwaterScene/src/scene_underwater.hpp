@@ -275,6 +275,14 @@ namespace {
     std::vector<FishAnimation> fishes;
     std::vector<glm::vec3>     fishColors;
 
+    // --- MRZ-06: straszenie ryb (lewy klik) ----------------------------------
+    bool      scareActive    = false;
+    float     scareTimer     = 0.0f;
+    float     scareDuration  = 3.0f;   // jak dlugo ryby uciekaja (s)
+    float     scareRadius    = 9.0f;   // promien od miejsca strachu
+    float     scareSpeedMult = 4.5f;   // ile razy szybciej ryby smigaja
+    glm::vec3 scareOrigin    = glm::vec3(0.0f);
+
     // NED-06: meduzy (pulsowanie)
     JellyParams jellyParams;
     PBRMaterial jellyMaterial = { glm::vec3(0.55f, 0.45f, 0.85f), 0.0f, 0.30f }; // fioletowo-niebieska, gladka
@@ -832,15 +840,23 @@ inline void renderScene(GLFWwindow* window)
         if (dt < 0.0f) dt = 0.0f;
         if (dt > 0.1f) dt = 0.1f;
 
+        // MRZ-06: odliczanie strachu
+        if (scareActive) { scareTimer -= dt; if (scareTimer <= 0.0f) scareActive = false; }
+        float baseWave = fishParams.waveSpeed;
+
         for (size_t i = 0; i < fishes.size(); ++i)
         {
-            fishes[i].update(dt);
+            // Ryby w promieniu od miejsca klikniecia smigaja szybciej i machaja ogonem jak szalone.
+            bool scared = scareActive && glm::distance(fishes[i].position(), scareOrigin) < scareRadius;
+            fishes[i].update(dt * (scared ? scareSpeedMult : 1.0f));
 
             PBRMaterial mat = fishMaterial;
             mat.albedo = (i < fishColors.size()) ? fishColors[i] : fishMaterial.albedo;
 
+            fishParams.waveSpeed = scared ? baseWave * 2.5f : baseWave; // frenzy ogona (per-ryba)
             drawFish(fishMesh, fishes[i].modelMatrix(), mat, time, fishes[i].swimPhase(), lightSpaceMat);
         }
+        fishParams.waveSpeed = baseWave; // przywroc (panel ImGui czyta oryginal)
     }
 
     // --- Meduzy (NED-06) ---
@@ -1052,6 +1068,18 @@ inline void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     headlampIntensity = glm::clamp(headlampIntensity + (float)yoffset * 0.6f, 0.0f, 30.0f);
 }
 
+inline void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+    ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+    // MRZ-06: lewy klik straszy ryby w poblizu kamery
+    if (action == GLFW_PRESS && button == GLFW_MOUSE_BUTTON_LEFT && !ImGui::GetIO().WantCaptureMouse)
+    {
+        scareActive = true;
+        scareTimer  = scareDuration;
+        scareOrigin = camera.position;
+    }
+}
+
 inline void updateCursorMode(GLFWwindow* window)
 {
     // Nad panelem ImGui pokaż kursor; w widoku 3D schowaj go do rozglądania.
@@ -1103,6 +1131,7 @@ inline void init(GLFWwindow* window)
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetKeyCallback(window, key_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     glEnable(GL_DEPTH_TEST);
@@ -1389,6 +1418,9 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::SliderFloat("Wave frequency", &fishParams.waveFrequency, 0.5f, 15.0f);
         ImGui::SliderFloat("Wave speed",     &fishParams.waveSpeed,     0.0f, 15.0f);
         ImGui::SliderFloat("Fin amplitude",  &fishParams.finAmplitude,  0.0f, 0.5f);
+        ImGui::TextDisabled("Lewy klik = strasz ryby w poblizu");
+        ImGui::SliderFloat("Strach: promien", &scareRadius, 1.0f, 20.0f);
+        ImGui::SliderFloat("Strach: mnoznik", &scareSpeedMult, 1.0f, 10.0f);
         ImGui::Separator();
         ImGui::Text("NED-06 Meduzy");
         ImGui::Checkbox("Pokaz meduzy", &showJelly);
