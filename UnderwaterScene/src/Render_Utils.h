@@ -17,6 +17,14 @@ namespace Core
 		GLuint vertexIndexBuffer;
 		int size = 0;
 
+		// AABB w lokalnym ukladzie modelu (po PreTransformVertices = w ukladzie sceny).
+		// Sluzy do auto-skalowania i sadzania modeli na dnie (NED).
+		glm::vec3 aabbMin = glm::vec3(0.0f);
+		glm::vec3 aabbMax = glm::vec3(0.0f);
+
+		// Albedo (base color) osadzony w GLB - per sub-mesh. 0 = brak, uzyj koloru materialu.
+		GLuint albedoTex = 0;
+
         void initFromOBJ(obj::Model& model);
 
 		void initFromAssimpMesh(aiMesh* mesh);
@@ -40,7 +48,7 @@ namespace Core
 
 	struct VertexData
 	{
-		static const int MAX_ATTRIBS = 8;
+		static constexpr int MAX_ATTRIBS = 8;
 		VertexAttribute Attribs[MAX_ATTRIBS];
 		int NumActiveAttribs;
 		int NumVertices;

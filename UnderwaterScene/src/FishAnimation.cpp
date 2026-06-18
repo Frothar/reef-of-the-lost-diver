@@ -21,6 +21,12 @@ glm::mat4 FishAnimation::modelMatrix() const
     return f.toMatrix() * glm::scale(glm::mat4(1.0f), glm::vec3(scale));
 }
 
+glm::mat4 FishAnimation::frameMatrix() const
+{
+    if (!path) return glm::mat4(1.0f);
+    return path->getFrame(t).toMatrix();
+}
+
 glm::vec3 FishAnimation::position() const
 {
     if (!path) return glm::vec3(0.0f);

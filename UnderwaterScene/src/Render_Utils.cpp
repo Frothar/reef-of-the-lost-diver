@@ -39,6 +39,19 @@ void Core::RenderContext::initFromAssimpMesh(aiMesh* mesh) {
             indices.push_back(face.mIndices[j]);
     }
 
+    // AABB w lokalnym ukladzie (po aiProcess_PreTransformVertices = uklad sceny).
+    if (mesh->mNumVertices > 0) {
+        aabbMin = glm::vec3( 1e30f);
+        aabbMax = glm::vec3(-1e30f);
+        for (unsigned int i = 0; i < mesh->mNumVertices; i++) {
+            const aiVector3D& v = mesh->mVertices[i];
+            aabbMin = glm::min(aabbMin, glm::vec3(v.x, v.y, v.z));
+            aabbMax = glm::max(aabbMax, glm::vec3(v.x, v.y, v.z));
+        }
+    } else {
+        aabbMin = aabbMax = glm::vec3(0.0f);
+    }
+
     unsigned int vertexDataBufferSize = sizeof(float) * mesh->mNumVertices * 3;
     unsigned int vertexNormalBufferSize = sizeof(float) * mesh->mNumVertices * 3;
     unsigned int vertexTexBufferSize = sizeof(float) * mesh->mNumVertices * 2;
@@ -69,13 +82,29 @@ void Core::RenderContext::initFromAssimpMesh(aiMesh* mesh) {
 
     glBufferSubData(GL_ARRAY_BUFFER, 0, vertexDataBufferSize, mesh->mVertices);
 
-    glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize, vertexNormalBufferSize, mesh->mNormals);
+    // Null-safe uploads: Sketchfab GLB meshes may lack normals/tangents/bitangents
+    if (mesh->mNormals)
+        glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize, vertexNormalBufferSize, mesh->mNormals);
+    else {
+        std::vector<float> zeros(mesh->mNumVertices * 3, 0.0f);
+        glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize, vertexNormalBufferSize, zeros.data());
+    }
 
     glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize, vertexTexBufferSize, &textureCoord[0]);
 
-    glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize, vertexTangentBufferSize, mesh->mTangents);
+    if (mesh->mTangents)
+        glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize, vertexTangentBufferSize, mesh->mTangents);
+    else {
+        std::vector<float> zeros(mesh->mNumVertices * 3, 0.0f);
+        glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize, vertexTangentBufferSize, zeros.data());
+    }
 
-    glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize + vertexTangentBufferSize, vertexBiTangentBufferSize, mesh->mBitangents);
+    if (mesh->mBitangents)
+        glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize + vertexTangentBufferSize, vertexBiTangentBufferSize, mesh->mBitangents);
+    else {
+        std::vector<float> zeros(mesh->mNumVertices * 3, 0.0f);
+        glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize + vertexTangentBufferSize, vertexBiTangentBufferSize, zeros.data());
+    }
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)(0));
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)(vertexDataBufferSize));

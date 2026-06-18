@@ -46,6 +46,9 @@ add_executable(UnderwaterScene
     src/Render_Utils.cpp
     src/Shader_Loader.cpp
     src/Texture.cpp
+    src/Spline.cpp
+    src/FishAnimation.cpp
+    src/AnimatedModel.cpp
     ${SOIL_SOURCES}
     ${IMGUI_SOURCES})
 
@@ -67,4 +70,6 @@ target_link_libraries(UnderwaterScene PRIVATE
 # Silence the OpenGL-deprecation warnings on macOS (OpenGL still works up to 4.1).
 if(APPLE)
     target_compile_definitions(UnderwaterScene PRIVATE GL_SILENCE_DEPRECATION)
+    # SOIL uses CoreFoundation for DXT capability queries on macOS.
+    target_link_libraries(UnderwaterScene PRIVATE "-framework CoreFoundation")
 endif()

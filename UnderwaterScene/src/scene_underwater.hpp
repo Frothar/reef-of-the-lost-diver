@@ -26,11 +26,13 @@
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
 #include "Texture.h"
+#include "SOIL/SOIL.h"           // dekodowanie osadzonych tekstur GLB z pamieci
 #include "Camera.h"               // Core::createPerspectiveMatrix
 #include "QuaternionCamera.h"     // MRZ-02 quaternion camera
 #include "ParticleSystem.h"       // MRZ-07 babelki
 #include "Spline.h"               // NED-01 splajn Catmull-Rom
 #include "FishAnimation.h"        // NED-04 ryby po splajnie z PTF
+#include "AnimatedModel.h"        // NED nurek - animacja szkieletowa (GPU skinning)
 
 #include <vector>
 
@@ -114,6 +116,7 @@ namespace {
     GLuint programSkybox = 0;
     GLuint programDebugLine = 0; // NED-01 podglad splajnu
     GLuint programFish   = 0;    // NED-03 pływanie ryb (A10)
+    GLuint programSketchFish = 0; // ta sama deformacja dla multi-mesh ryb Sketchfab
     GLuint programJelly  = 0;    // NED-06 pulsujace meduzy
     GLuint programWaterOverlay = 0; // pelnoekranowy efekt wody
     GLuint programShadowDepth  = 0; // OLE-04 przebieg cieni
@@ -153,6 +156,28 @@ namespace {
     Core::RenderContext fishContext;   // NED-03/ALL-01 model ryby (models/fish.obj)
     Core::RenderContext jellyContext;  // NED-06 model meduzy (models/jellyfish.obj)
 
+    // --- Modele Sketchfab (multi-mesh GLB) -----------------------------------
+    using MultiMeshModel = std::vector<Core::RenderContext>;
+
+    struct SceneProp {
+        MultiMeshModel* model;
+        glm::mat4 transform;
+        PBRMaterial material;
+    };
+
+    MultiMeshModel coralModel1;     // coral.glb
+    MultiMeshModel coralModel2;     // Coral 3D Model.glb
+    MultiMeshModel coralPiece;      // Coral Piece.glb
+    MultiMeshModel crescentCoral;   // Crescent Moon Coral.glb
+    MultiMeshModel coralFish;       // coral_fish.glb
+    MultiMeshModel deepSeaFish;     // Deep Sea Fish 3D.glb
+    MultiMeshModel guppyFish;       // Guppy Fish.glb
+    MultiMeshModel shinyFish;       // Shiny Fish.glb
+    MultiMeshModel porscheModel;    // Porsche 911 Turbo 1975.glb
+
+    std::vector<SceneProp> sceneProps;
+    bool showProps = true;
+
     GLuint skyboxVAO = 0, skyboxVBO = 0;
     GLuint skyboxCubemap = 0;
 
@@ -164,8 +189,45 @@ namespace {
 
     // --- Druga sciezka dla ryb (NED-04) --------------------------------------
     Spline fishSplineB;                 // sciezka B (druga grupa ryb)
+    Spline fishSplineC;                 // sciezka C (ryby Sketchfab)
     GLuint splineBVAO = 0, splineBVBO = 0;
     int    splineBVertexCount = 0;
+
+    // Ryby Sketchfab na splajnach (rysowane drawMultiMeshPBR)
+    struct SketchFishInstance {
+        FishAnimation anim;
+        MultiMeshModel* model;
+        PBRMaterial material;
+        glm::mat4 localFix = glm::mat4(1.0f); // skala+centrowanie+wyrownanie ciala (fishLocalFix)
+        float bodyLen = 1.0f;                 // dlugosc ciala po normalizacji (= targetSize)
+    };
+    std::vector<SketchFishInstance> sketchFish;
+
+    // --- Nurek (NED): animacja szkieletowa, GPU skinning ---------------------
+    AnimatedModel          diver;
+    GLuint                 programSkinned = 0;
+    std::vector<glm::mat4> diverBones;            // macierze kosci na biezaca klatke
+    bool                   showDiver      = true;
+    int                    diverClip      = 0;    // ktory z 5 klipow Mixamo
+    int                    diverClipSwim  = 0;    // klip plywania (ustawiany w init)
+    int                    diverClipIdle  = 0;    // klip idle
+    float                  diverAnimSpeed = 1.0f; // tempo animacji
+    // Pozycja i orientacja nurka (3-cia osoba)
+    glm::vec3 diverPos       = glm::vec3(0.0f, 2.5f, 0.0f);
+    glm::quat diverOrient    = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // kwaternion orientacji
+    glm::vec3 diverRotDeg    = glm::vec3(0.0f, 180.0f, 0.0f); // pitch(X), yaw(Y), roll(Z) - Euler fallback
+    float     diverScaleMul  = 0.6f;        // mnoznik do auto-skali
+    float     diverBaseScale = 1.0f;        // auto-skala z AABB (liczona przy load)
+    glm::vec3 diverCenter    = glm::vec3(0.0f); // srodek bind-pose (do centrowania)
+    bool      diverMoving    = false;       // czy nurek sie rusza w tej klatce
+
+    // Tryb trzeciej osoby
+    bool      thirdPerson       = true;     // V = toggle
+    float     tpCamDistance     = 3.0f;     // odleglosc kamery za nurkiem
+    float     tpCamHeight       = 1.2f;     // wysokosc kamery nad nurkiem
+    float     tpCamSmoothFactor = 8.0f;     // gladkosc sledzenia (wieksze = szybsze)
+    glm::vec3 tpCamCurrentPos;              // aktualna pozycja kamery (gladzenie)
+    bool      tpCamInitialized  = false;    // czy ustawiono startowa pozycje
 
     // --- PTF debug (NED-02) --------------------------------------------------
     // Kolorowe osie (T=czerwona, N=zielona, B=niebieska) w co ktorej ramce PTF.
@@ -295,6 +357,11 @@ namespace {
 // ---------------------------------------------------------------------------
 inline glm::mat4 createCameraMatrix()
 {
+    if (thirdPerson && diver.valid())
+    {
+        glm::vec3 lookAt = diverPos + glm::vec3(0.0f, 0.5f, 0.0f);
+        return glm::lookAt(camera.position, lookAt, glm::vec3(0.0f, 1.0f, 0.0f));
+    }
     return camera.viewMatrix();
 }
 
@@ -490,6 +557,160 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
     glUniform1f(glGetUniformLocation(programFish, "finAmplitude"),  fishParams.finAmplitude);
 
     Core::DrawContext(context);
+    glUseProgram(0);
+}
+
+// Rysuje multi-mesh rybe Sketchfab z deformacja plywania (sketchfish.vert).
+// preTransform = localFix (normalizacja modelu), modelMatrix = ramka PTF splajnu.
+// bodyLen = dlugosc ciala po normalizacji (= targetSize). Per sub-mesh bindujemy
+// jego wlasna teksture base-color (jak w drawMultiMeshPBR).
+inline void drawSketchFish(MultiMeshModel& model, const glm::mat4& modelMatrix,
+                           const glm::mat4& preTransform, const PBRMaterial& material,
+                           float time, float phaseOffset, float bodyLen,
+                           const glm::mat4& lightSpaceMat)
+{
+    glUseProgram(programSketchFish);
+
+    glm::mat4 view = createCameraMatrix();
+    glm::mat4 projection = createPerspectiveMatrix();
+
+    glUniformMatrix4fv(glGetUniformLocation(programSketchFish, "model"),        1, GL_FALSE, (float*)&modelMatrix);
+    glUniformMatrix4fv(glGetUniformLocation(programSketchFish, "preTransform"), 1, GL_FALSE, (float*)&preTransform);
+    glUniformMatrix4fv(glGetUniformLocation(programSketchFish, "view"),         1, GL_FALSE, (float*)&view);
+    glUniformMatrix4fv(glGetUniformLocation(programSketchFish, "projection"),   1, GL_FALSE, (float*)&projection);
+
+    glUniform3fv(glGetUniformLocation(programSketchFish, "cameraPos"),  1, (float*)&camera.position);
+    glUniform3fv(glGetUniformLocation(programSketchFish, "lightDir"),   1, (float*)&sunDir);
+    glUniform3fv(glGetUniformLocation(programSketchFish, "lightColor"), 1, (float*)&sunColor);
+
+    bindShadowUniforms(programSketchFish, lightSpaceMat);
+    bindLightUniforms(programSketchFish);
+
+    glUniform3fv(glGetUniformLocation(programSketchFish, "fogColor"),  1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programSketchFish, "fogDensity"), fogDensity);
+
+    glUniform1f(glGetUniformLocation(programSketchFish, "time"),          time + phaseOffset);
+    glUniform1f(glGetUniformLocation(programSketchFish, "waveAmplitude"), fishParams.waveAmplitude);
+    glUniform1f(glGetUniformLocation(programSketchFish, "waveFrequency"), fishParams.waveFrequency);
+    glUniform1f(glGetUniformLocation(programSketchFish, "waveSpeed"),     fishParams.waveSpeed);
+    glUniform1f(glGetUniformLocation(programSketchFish, "bodyLength"),    bodyLen);
+    glUniform1f(glGetUniformLocation(programSketchFish, "finAmplitude"),  fishParams.finAmplitude);
+
+    for (auto& ctx : model)
+    {
+        PBRMaterial m = material;
+        if (ctx.albedoTex) { m.tex.albedoMap = ctx.albedoTex; m.tex.useAlbedoMap = true; }
+        bindPBRMaterial(programSketchFish, m);
+        Core::DrawContext(ctx);
+    }
+    glUseProgram(0);
+}
+
+// Buduje macierz umiejscowienia nurka.
+// Model Mixamo ma przod w +Z, a my ruszamy sie w -Z -> dodajemy obrot 180 stopni.
+inline glm::mat4 buildDiverMatrix()
+{
+    // Kompensacja: model Mixamo patrzy w +Z, my ruszamy sie w -Z
+    static const glm::mat4 modelFlip = glm::rotate(glm::radians(180.0f), glm::vec3(0,1,0));
+
+    if (thirdPerson)
+    {
+        glm::mat4 rot = glm::mat4_cast(diverOrient);
+        return glm::translate(diverPos)
+             * rot
+             * modelFlip
+             * glm::scale(glm::vec3(diverBaseScale * diverScaleMul))
+             * glm::translate(-diverCenter);
+    }
+    else
+    {
+        return glm::translate(diverPos)
+             * glm::rotate(glm::radians(diverRotDeg.y), glm::vec3(0,1,0))
+             * glm::rotate(glm::radians(diverRotDeg.x), glm::vec3(1,0,0))
+             * glm::rotate(glm::radians(diverRotDeg.z), glm::vec3(0,0,1))
+             * glm::scale(glm::vec3(diverBaseScale * diverScaleMul))
+             * glm::translate(-diverCenter);
+    }
+}
+
+// Wektory bazowe nurka z kwaternionu orientacji.
+inline glm::vec3 diverFront() { return diverOrient * glm::vec3(0.0f, 0.0f, -1.0f); }
+inline glm::vec3 diverRight() { return diverOrient * glm::vec3(1.0f, 0.0f,  0.0f); }
+inline glm::vec3 diverUp()    { return diverOrient * glm::vec3(0.0f, 1.0f,  0.0f); }
+
+// Aktualizuje kamere w trybie 3-ciej osoby — podaza za nurkiem z gladkim lag-em.
+inline void updateThirdPersonCamera(float dt)
+{
+    // Punkt docelowy: za nurkiem + nad nurkiem
+    glm::vec3 targetCamPos = diverPos
+                           - diverFront() * tpCamDistance
+                           + glm::vec3(0.0f, tpCamHeight, 0.0f);
+
+    if (!tpCamInitialized)
+    {
+        tpCamCurrentPos = targetCamPos;
+        tpCamInitialized = true;
+    }
+    else
+    {
+        // Exponential smooth (lerp)
+        float t = glm::clamp(tpCamSmoothFactor * dt, 0.0f, 1.0f);
+        tpCamCurrentPos = glm::mix(tpCamCurrentPos, targetCamPos, t);
+    }
+
+    // Clamp kamera nad podloga
+    if (tpCamCurrentPos.y < 0.6f) tpCamCurrentPos.y = 0.6f;
+
+    // Kamera patrzy na nurka (troche powyzej srodka ciala)
+    glm::vec3 lookAt = diverPos + glm::vec3(0.0f, 0.5f, 0.0f);
+    camera.position = tpCamCurrentPos;
+    // Ustawiamy orientacje kamery tak, by patrzyla na nurka
+    // Uzywamy glm::lookAt do wyliczenia macierzy widoku wprost
+}
+
+// Rysuje nurka z animacja szkieletowa (GPU skinning, skinned.vert + pbr.frag).
+// Poza liczona z klipu diverClip w czasie; umiejscowienie z buildDiverMatrix().
+inline void drawDiver(float time, const glm::mat4& lightSpaceMat)
+{
+    if (!showDiver || !diver.valid()) return;
+
+    glm::mat4 modelMatrix = buildDiverMatrix();
+    diver.computePose(diverClip, time, diverAnimSpeed, diverBones);
+
+    glUseProgram(programSkinned);
+
+    glm::mat4 view = createCameraMatrix();
+    glm::mat4 projection = createPerspectiveMatrix();
+    glUniformMatrix4fv(glGetUniformLocation(programSkinned, "model"),      1, GL_FALSE, (float*)&modelMatrix);
+    glUniformMatrix4fv(glGetUniformLocation(programSkinned, "view"),       1, GL_FALSE, (float*)&view);
+    glUniformMatrix4fv(glGetUniformLocation(programSkinned, "projection"), 1, GL_FALSE, (float*)&projection);
+
+    // Macierze kosci -> uniform finalBones[]
+    if (!diverBones.empty())
+        glUniformMatrix4fv(glGetUniformLocation(programSkinned, "finalBones"),
+                           (GLsizei)diverBones.size(), GL_FALSE, (float*)diverBones.data());
+
+    glUniform3fv(glGetUniformLocation(programSkinned, "cameraPos"),  1, (float*)&camera.position);
+    glUniform3fv(glGetUniformLocation(programSkinned, "lightDir"),   1, (float*)&sunDir);
+    glUniform3fv(glGetUniformLocation(programSkinned, "lightColor"), 1, (float*)&sunColor);
+
+    bindShadowUniforms(programSkinned, lightSpaceMat);
+    bindLightUniforms(programSkinned);
+    glUniform3fv(glGetUniformLocation(programSkinned, "fogColor"),  1, (float*)&waterColor);
+    glUniform1f(glGetUniformLocation(programSkinned, "fogDensity"), fogDensity);
+
+    for (const auto& sm : diver.meshes())
+    {
+        PBRMaterial m;
+        m.albedo    = sm.albedo;
+        m.metallic  = sm.metallic;
+        m.roughness = glm::clamp(sm.roughness, 0.05f, 1.0f);
+        bindPBRMaterial(programSkinned, m);
+
+        glBindVertexArray(sm.vao);
+        glDrawElements(GL_TRIANGLES, sm.indexCount, GL_UNSIGNED_INT, (void*)0);
+    }
+    glBindVertexArray(0);
     glUseProgram(0);
 }
 
@@ -692,6 +913,35 @@ inline void drawShadowDepth(Core::RenderContext& context, const glm::mat4& model
     Core::DrawContext(context);
 }
 
+// Rysuje multi-mesh model (GLB ze Sketchfab) z PBR.
+inline void drawMultiMeshPBR(MultiMeshModel& model, glm::mat4 modelMatrix,
+                              const PBRMaterial& material, const glm::mat4& lightSpaceMat)
+{
+    for (auto& ctx : model)
+    {
+        if (ctx.albedoTex)
+        {
+            // Sub-mesh ma wlasna teksture base-color z GLB -> uzyj jej zamiast plaskiego koloru.
+            PBRMaterial m = material;
+            m.tex.albedoMap = ctx.albedoTex;
+            m.tex.useAlbedoMap = true;
+            drawPBRObject(ctx, modelMatrix, m, lightSpaceMat);
+        }
+        else
+        {
+            drawPBRObject(ctx, modelMatrix, material, lightSpaceMat);
+        }
+    }
+}
+
+// Rysuje multi-mesh model do shadow depth FBO.
+inline void drawMultiMeshShadow(MultiMeshModel& model, const glm::mat4& modelMatrix,
+                                 const glm::mat4& lightSpaceMat)
+{
+    for (auto& ctx : model)
+        drawShadowDepth(ctx, modelMatrix, lightSpaceMat);
+}
+
 inline void renderScene(GLFWwindow* window)
 {
     float time = (float)glfwGetTime();
@@ -722,12 +972,21 @@ inline void renderScene(GLFWwindow* window)
         }
     }
 
-    // --- MRZ-05 (B13): latarka nurka - spotlight jadacy z kamera --------------
+    // --- MRZ-05 (B13): latarka nurka - spotlight jadacy z kamera/nurkiem ------
     if (headlampOn && numSpotLights < MAX_SPOT_LIGHTS)
     {
         SpotLightCPU& sl = spotLights[numSpotLights];
-        sl.position    = camera.position;
-        sl.direction   = camera.front();
+        if (thirdPerson && diver.valid())
+        {
+            // W 3-ciej osobie latarka swieci z pozycji nurka, w kierunku nurka
+            sl.position  = diverPos + glm::vec3(0.0f, 0.8f, 0.0f); // na wysokosci glowy
+            sl.direction = diverFront();
+        }
+        else
+        {
+            sl.position  = camera.position;
+            sl.direction = camera.front();
+        }
         sl.color       = headlampColors[headlampColorIdx];
         sl.intensity   = headlampIntensity;
         sl.constant    = 1.0f;
@@ -794,6 +1053,13 @@ inline void renderScene(GLFWwindow* window)
                             * glm::scale(glm::vec3(jellyScale[i]));
                 drawShadowDepth(jellyContext, m, lightSpaceMat);
             }
+        }
+
+        // Dekoracje Sketchfab
+        if (showProps)
+        {
+            for (auto& prop : sceneProps)
+                drawMultiMeshShadow(*prop.model, prop.transform, lightSpaceMat);
         }
 
         glDisable(GL_CULL_FACE);
@@ -888,6 +1154,35 @@ inline void renderScene(GLFWwindow* window)
         }
     }
 
+    // --- Dekoracje Sketchfab (korale, Porsche) ---
+    if (showProps)
+    {
+        for (auto& prop : sceneProps)
+            drawMultiMeshPBR(*prop.model, prop.transform, prop.material, lightSpaceMat);
+    }
+
+    // --- Ryby Sketchfab na splajnach ---
+    if (showProps)
+    {
+        static float sfLastTime = time;
+        float sfDt = time - sfLastTime;
+        sfLastTime = time;
+        if (sfDt < 0.0f) sfDt = 0.0f;
+        if (sfDt > 0.1f) sfDt = 0.1f;
+
+        for (auto& sf : sketchFish)
+        {
+            sf.anim.update(sfDt);
+            // Ta sama deformacja plywania co nasze ryby (sketchfish.vert):
+            // frameMatrix() umiejscawia, localFix normalizuje model do przestrzeni ciala.
+            drawSketchFish(*sf.model, sf.anim.frameMatrix(), sf.localFix, sf.material,
+                           time, sf.anim.swimPhase(), sf.bodyLen, lightSpaceMat);
+        }
+    }
+
+    // --- Nurek (animacja szkieletowa, GPU skinning) ---
+    drawDiver(time, lightSpaceMat);
+
     // Splajn (NED-01) - podglad sciezki dla ryb
     drawSpline();
 
@@ -962,6 +1257,141 @@ inline bool loadModelToContext(const std::string& path, Core::RenderContext& con
     context.initFromAssimpMesh(scene->mMeshes[0]);
     std::cout << "Loaded model: " << path << " (" << context.size / 3 << " tris)" << std::endl;
     return true;
+}
+
+// Laduje osadzona (w GLB) teksture base-color danego mesha do tekstury OpenGL.
+// Zwraca 0 gdy material nie ma tekstury albo jest zewnetrzna. To naprawia
+// "biale jak z gliny" modele Sketchfab - dostaja swoje prawdziwe kolory.
+inline GLuint loadEmbeddedAlbedo(const aiScene* scene, const aiMesh* mesh)
+{
+    if (mesh->mMaterialIndex >= scene->mNumMaterials) return 0;
+    const aiMaterial* mat = scene->mMaterials[mesh->mMaterialIndex];
+
+    aiString texPath;
+    if (mat->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) != AI_SUCCESS &&
+        mat->GetTexture(aiTextureType_DIFFUSE,    0, &texPath) != AI_SUCCESS)
+        return 0;
+
+    const aiTexture* tex = scene->GetEmbeddedTexture(texPath.C_Str());
+    if (!tex) return 0; // zewnetrzny plik - GLB zwykle osadza wszystko, wiec pomijamy
+
+    GLuint id = 0;
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    if (tex->mHeight == 0)
+    {
+        // Skompresowana (PNG/JPG) w pamieci: mWidth = liczba bajtow danych.
+        int w = 0, h = 0, ch = 0;
+        unsigned char* img = SOIL_load_image_from_memory(
+            (const unsigned char*)tex->pcData, (int)tex->mWidth, &w, &h, &ch, SOIL_LOAD_RGBA);
+        if (!img) { glDeleteTextures(1, &id); return 0; }
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img);
+        SOIL_free_image_data(img);
+    }
+    else
+    {
+        // Surowe piksele aiTexel (BGRA wg Assimp): mWidth x mHeight.
+        int w = (int)tex->mWidth, h = (int)tex->mHeight;
+        std::vector<unsigned char> rgba((size_t)w * h * 4);
+        for (int i = 0; i < w * h; ++i) {
+            rgba[i*4+0] = tex->pcData[i].r;
+            rgba[i*4+1] = tex->pcData[i].g;
+            rgba[i*4+2] = tex->pcData[i].b;
+            rgba[i*4+3] = tex->pcData[i].a;
+        }
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    }
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return id;
+}
+
+inline bool loadMultiMeshModel(const std::string& path, MultiMeshModel& model)
+{
+    Assimp::Importer import;
+    // aiProcess_PreTransformVertices WYPIEKA transformacje wezlow (skala/obrot/translacja
+    // z grafu sceny GLB, w tym konwersje Z-up->Y-up) prosto w wierzcholki. Bez tego
+    // modele Sketchfab laduja w surowym ukladzie mesha -> lezace zamiast stojace.
+    const aiScene* scene = import.ReadFile(path,
+        aiProcess_Triangulate | aiProcess_CalcTangentSpace | aiProcess_GenNormals
+        | aiProcess_PreTransformVertices);
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+    {
+        std::cout << "ERROR::ASSIMP::" << path << " -> " << import.GetErrorString() << std::endl;
+        return false;
+    }
+    model.resize(scene->mNumMeshes);
+    int totalTris = 0, texCount = 0;
+    for (unsigned i = 0; i < scene->mNumMeshes; ++i)
+    {
+        model[i].initFromAssimpMesh(scene->mMeshes[i]);
+        model[i].albedoTex = loadEmbeddedAlbedo(scene, scene->mMeshes[i]);
+        if (model[i].albedoTex) ++texCount;
+        totalTris += model[i].size / 3;
+    }
+    std::cout << "Loaded multi-mesh: " << path << " (" << scene->mNumMeshes
+              << " meshes, " << totalTris << " tris, " << texCount << " tekstur)" << std::endl;
+    return true;
+}
+
+// AABB calego wieloczesciowego modelu (suma AABB sub-meshy, po PreTransformVertices).
+inline void modelAABB(const MultiMeshModel& model, glm::vec3& mn, glm::vec3& mx)
+{
+    mn = glm::vec3( 1e30f);
+    mx = glm::vec3(-1e30f);
+    bool any = false;
+    for (const auto& c : model)
+    {
+        if (c.aabbMin == c.aabbMax) continue; // pusty mesh
+        mn = glm::min(mn, c.aabbMin);
+        mx = glm::max(mx, c.aabbMax);
+        any = true;
+    }
+    if (!any) { mn = glm::vec3(0.0f); mx = glm::vec3(0.0f); }
+}
+
+// Macierz dekoracji: skaluje model tak, by jego najwiekszy wymiar == targetSize,
+// centruje go w poziomie nad (pos.x,pos.z) i SADZA dnem dokladnie na wysokosci pos.y.
+// Dzieki temu nic nie tonie w piasku niezaleznie od originu/skali modelu GLB.
+inline glm::mat4 placeProp(const MultiMeshModel& model, glm::vec3 pos,
+                           float targetSize, float yawRad = 0.0f)
+{
+    glm::vec3 mn, mx; modelAABB(model, mn, mx);
+    glm::vec3 sz = mx - mn;
+    float maxDim = glm::max(sz.x, glm::max(sz.y, sz.z));
+    float s = (maxDim > 1e-6f) ? targetSize / maxDim : 1.0f;
+    glm::vec3 c = 0.5f * (mn + mx);
+    // translate(pos) * yaw * scale(s) * (przesun dol-srodek modelu do origin)
+    return glm::translate(pos)
+         * glm::rotate(yawRad, glm::vec3(0.0f, 1.0f, 0.0f))
+         * glm::scale(glm::vec3(s))
+         * glm::translate(glm::vec3(-c.x, -mn.y, -c.z));
+}
+
+// Lokalna korekta modelu ryby Sketchfab dla ruchu po splajnie:
+// - skaluje do targetSize, centruje na srodku ciala (zeby nie zataczala luku obok sciezki),
+// - wyrownuje najdluzsza pozioma os ciala do lokalnego -Z (kierunek "do przodu" ramki PTF),
+//   wiec ryba plynie wzdluz ciala, a nie bokiem.
+// headingDeg: dodatkowy obrot wokol pionu na wypadek gdy nos modelu wskazuje
+// w przeciwna strone niz kierunek plyniecia (frame patrzy w -Z). 180 = obroc rybe
+// "przodem do przodu". Tu strojone per-instancja, bo kazdy model Sketchfab ma inny przod.
+inline glm::mat4 fishLocalFix(const MultiMeshModel& model, float targetSize, float headingDeg)
+{
+    glm::vec3 mn, mx; modelAABB(model, mn, mx);
+    glm::vec3 sz = mx - mn;
+    float maxDim = glm::max(sz.x, glm::max(sz.y, sz.z));
+    float s = (maxDim > 1e-6f) ? targetSize / maxDim : 1.0f;
+    glm::vec3 c = 0.5f * (mn + mx);
+    // Jesli cialo jest dluzsze w X niz w Z -> obroc o 90st, by dlugosc legla wzdluz Z.
+    float bodyYaw = ((sz.x > sz.z) ? glm::radians(90.0f) : 0.0f) + glm::radians(headingDeg);
+    return glm::scale(glm::vec3(s))
+         * glm::rotate(bodyYaw, glm::vec3(0.0f, 1.0f, 0.0f))
+         * glm::translate(-c);
 }
 
 // ---------------------------------------------------------------------------
@@ -1041,7 +1471,17 @@ inline void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     float dy = (lastY - (float)ypos) * mouseSensitivity; // gora dodatnia
     lastX = (float)xpos; lastY = (float)ypos;
 
-    camera.addYawPitch(-dx, dy);
+    if (thirdPerson)
+    {
+        // Mysz obraca nurka (yaw wokol swiata-gora, pitch wokol lokalnego prawa)
+        glm::quat qYaw   = glm::angleAxis(glm::radians(-dx), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::quat qPitch = glm::angleAxis(glm::radians(dy),  diverRight());
+        diverOrient = glm::normalize(qYaw * qPitch * diverOrient);
+    }
+    else
+    {
+        camera.addYawPitch(-dx, dy);
+    }
 }
 
 inline void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -1059,6 +1499,24 @@ inline void key_callback(GLFWwindow* window, int key, int scancode, int action, 
         if (key == GLFW_KEY_C) headlampColorIdx = (headlampColorIdx + 1) % 3;  // kolor latarki
         if (key == GLFW_KEY_B) showBioLights = !showBioLights;                 // bioluminescencja
         if (key == GLFW_KEY_H) showPanel = !showPanel;                         // pokaz/ukryj panel
+        if (key == GLFW_KEY_V)                                                 // 3-cia osoba / free-cam
+        {
+            thirdPerson = !thirdPerson;
+            if (!thirdPerson)
+            {
+                // Przejscie do 1-szej osoby: kamera w oczach nurka
+                camera.position = diverPos + glm::vec3(0.0f, 0.8f, 0.0f);
+                // Synchronizuj orientacje kamery z orientacja nurka
+                // (Camera uzywa kwaterniony, wiec to proste)
+                // Nurek patrzy w diverFront(), kamera tez powinna
+            }
+            else
+            {
+                // Przejscie do 3-ciej osoby: nurek = pozycja kamery
+                diverPos = camera.position;
+                tpCamInitialized = false; // reset smooth followowania
+            }
+        }
     }
 }
 
@@ -1103,17 +1561,46 @@ inline void processInput(GLFWwindow* window)
     float roll = rollSpeed * dt;
 
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
-    // ruch wzdluz lokalnych osi kamery
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.moveForward(speed);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.moveForward(-speed);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.moveRight(-speed);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.moveRight(speed);
-    // gora/dol wzgledem swiata (ku powierzchni / w glab)
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)        camera.moveWorldUp(speed);
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) camera.moveWorldUp(-speed);
-    // przechyl (roll)
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) camera.addRoll(roll);
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) camera.addRoll(-roll);
+
+    if (thirdPerson && diver.valid())
+    {
+        // === TRYB 3-CIEJ OSOBY: WSAD rusza nurkiem ===
+        diverMoving = false;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { diverPos += diverFront() * speed; diverMoving = true; }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { diverPos -= diverFront() * speed; diverMoving = true; }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) { diverPos -= diverRight() * speed; diverMoving = true; }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) { diverPos += diverRight() * speed; diverMoving = true; }
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)        { diverPos.y += speed; diverMoving = true; }
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) { diverPos.y -= speed; diverMoving = true; }
+        // Roll nurka
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            diverOrient = glm::normalize(diverOrient * glm::angleAxis(glm::radians(roll), glm::vec3(0.0f, 0.0f, -1.0f)));
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            diverOrient = glm::normalize(diverOrient * glm::angleAxis(glm::radians(-roll), glm::vec3(0.0f, 0.0f, -1.0f)));
+
+        // Clamp nurka nad podloga
+        if (diverPos.y < 0.6f) diverPos.y = 0.6f;
+
+        // Kamera podaza za nurkiem
+        updateThirdPersonCamera(dt);
+    }
+    else
+    {
+        // === TRYB FREE-CAM: WSAD rusza kamera ===
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.moveForward(speed);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.moveForward(-speed);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.moveRight(-speed);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.moveRight(speed);
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)        camera.moveWorldUp(speed);
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) camera.moveWorldUp(-speed);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) camera.addRoll(roll);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) camera.addRoll(-roll);
+
+        // Nie pozwol kamerze wplynac pod piasek
+        const float minCameraY = 0.4f;
+        if (camera.position.y < minCameraY)
+            camera.position.y = minCameraY;
+    }
 
     // MRZ-05: jasnosc latarki na +/- (alternatywa: scroll)
     float lampStep = 12.0f * dt;
@@ -1170,6 +1657,12 @@ inline void init(GLFWwindow* window)
     // NED-03: fish.vert deformuje, oswietlenie wspolne z pbr.frag (spojnosc z OLE-01)
     programFish = shaderLoader.CreateProgram(
         (char*)"shaders/fish.vert", (char*)"shaders/pbr.frag");
+    // Ta sama deformacja dla multi-mesh ryb Sketchfab (z dodatkowa normalizacja modelu)
+    programSketchFish = shaderLoader.CreateProgram(
+        (char*)"shaders/sketchfish.vert", (char*)"shaders/pbr.frag");
+    // NED nurek: GPU skinning (animacja szkieletowa), oswietlenie wspolne z pbr.frag
+    programSkinned = shaderLoader.CreateProgram(
+        (char*)"shaders/skinned.vert", (char*)"shaders/pbr.frag");
     // NED-06: meduza - osobny vertex shader (pulsowanie), wspolny pbr.frag
     programJelly = shaderLoader.CreateProgram(
         (char*)"shaders/jellyfish.vert", (char*)"shaders/pbr.frag");
@@ -1184,11 +1677,12 @@ inline void init(GLFWwindow* window)
 
     // MRZ-07: babelki - emitery przy dnie (kominy/wybicia z piasku)
     {
+        // Emitery przy dnie (gora piasku na y=0) - babelki wybijaja z piasku i wznosza sie.
         std::vector<glm::vec3> bubbleEmitters = {
-            glm::vec3(-5.0f, -1.8f, -3.0f),
-            glm::vec3( 3.0f, -1.8f,  2.0f),
-            glm::vec3( 0.0f, -1.8f, -6.0f),
-            glm::vec3( 6.0f, -1.8f,  4.0f),
+            glm::vec3(-5.0f, 0.0f, -3.0f),
+            glm::vec3( 3.0f, 0.0f,  2.0f),
+            glm::vec3( 0.0f, 0.0f, -6.0f),
+            glm::vec3( 6.0f, 0.0f,  4.0f),
         };
         bubbles.init(160, bubbleEmitters);
     }
@@ -1203,6 +1697,68 @@ inline void init(GLFWwindow* window)
         std::cout << "Brak models/fish.obj – ryby beda uzywac kuli jako placeholdera" << std::endl;
     if (!loadModelToContext("./models/jellyfish.obj", jellyContext))
         std::cout << "Brak models/jellyfish.obj – meduzy nie beda widoczne" << std::endl;
+
+    // --- Modele Sketchfab (multi-mesh GLB) ---
+    loadMultiMeshModel("./models/coral.glb", coralModel1);
+    loadMultiMeshModel("./models/Coral 3D Model.glb", coralModel2);
+    loadMultiMeshModel("./models/Coral Piece.glb", coralPiece);
+    loadMultiMeshModel("./models/Crescent Moon Coral.glb", crescentCoral);
+    loadMultiMeshModel("./models/coral_fish.glb", coralFish);
+    loadMultiMeshModel("./models/Deep Sea Fish 3D.glb", deepSeaFish);
+    loadMultiMeshModel("./models/Guppy Fish.glb", guppyFish);
+    loadMultiMeshModel("./models/Shiny Fish.glb", shinyFish);
+    loadMultiMeshModel("./models/Porsche 911 Turbo 1975.glb", porscheModel);
+
+    // Rozmieszczenie dekoracji na scenie.
+    // Dno (cube.obj ma wierzcholki +-10): translate(0,-2,0)*scale(40,0.2,40)
+    //   => gora piasku na y = 10*0.2 - 2 = 0.0 (NIE -1.9!). Stad floorY = 0.
+    // placeProp() sam liczy AABB (po PreTransformVertices), skaluje do zadanego
+    // rozmiaru w jednostkach swiata i SADZA model dnem na floorY - nic nie tonie.
+    const float floorY = 0.0f;
+    sceneProps.clear();
+
+    // === KORALOWCE (gesty rif) === targetSize = najwiekszy wymiar w jedn. swiata
+    sceneProps.push_back({&coralModel1, placeProp(coralModel1, glm::vec3(-8.0f, floorY, -5.0f), 3.4f, 0.0f), {glm::vec3(0.85f,0.35f,0.30f), 0.0f, 0.7f}});
+    sceneProps.push_back({&coralModel1, placeProp(coralModel1, glm::vec3( 3.0f, floorY, -3.0f), 3.0f, 0.8f), {glm::vec3(0.75f,0.25f,0.20f), 0.0f, 0.7f}});
+    sceneProps.push_back({&coralModel1, placeProp(coralModel1, glm::vec3(12.0f, floorY,  5.0f), 4.2f, 2.2f), {glm::vec3(0.80f,0.40f,0.55f), 0.0f, 0.7f}});
+    sceneProps.push_back({&coralModel2, placeProp(coralModel2, glm::vec3( 5.0f, floorY,  8.0f), 4.0f, 0.0f), {glm::vec3(0.90f,0.55f,0.40f), 0.0f, 0.6f}});
+    sceneProps.push_back({&coralModel2, placeProp(coralModel2, glm::vec3(-4.0f, floorY, -9.0f), 3.2f, 1.5f), {glm::vec3(0.95f,0.40f,0.30f), 0.0f, 0.55f}});
+    sceneProps.push_back({&coralPiece,  placeProp(coralPiece,  glm::vec3(-3.0f, floorY,  7.0f), 2.6f, 0.0f), {glm::vec3(0.70f,0.30f,0.50f), 0.0f, 0.65f}});
+    sceneProps.push_back({&coralPiece,  placeProp(coralPiece,  glm::vec3(-6.0f, floorY, 10.0f), 2.2f, 2.4f), {glm::vec3(0.65f,0.50f,0.70f), 0.0f, 0.6f}});
+    sceneProps.push_back({&coralPiece,  placeProp(coralPiece,  glm::vec3( 9.0f, floorY, -6.0f), 3.0f, 0.5f), {glm::vec3(0.80f,0.35f,0.45f), 0.0f, 0.7f}});
+    sceneProps.push_back({&crescentCoral, placeProp(crescentCoral, glm::vec3(10.0f, floorY, -3.0f), 4.2f, 0.0f), {glm::vec3(0.95f,0.80f,0.30f), 0.0f, 0.55f}});
+    sceneProps.push_back({&crescentCoral, placeProp(crescentCoral, glm::vec3(-10.0f,floorY,  4.0f), 3.6f, 3.0f), {glm::vec3(0.90f,0.70f,0.25f), 0.0f, 0.5f}});
+    sceneProps.push_back({&coralFish,   placeProp(coralFish,   glm::vec3( 7.0f, floorY, -8.0f), 3.4f, 0.0f), {glm::vec3(0.90f,0.45f,0.25f), 0.0f, 0.5f}});
+
+    // === PORSCHE 911 zatopione === targetSize = dlugosc auta w jedn. swiata.
+    // Najpierw sadzimy auto na dnie (placeProp), potem przechylamy je na bok o -8st
+    // WOKOL punktu kontaktu z piaskiem - jeden bok lekko wbity w dno, jak wrak.
+    {
+        glm::vec3 porschePos(15.0f, floorY, -10.0f);
+        glm::mat4 porscheM = glm::translate(porschePos)
+            * glm::rotate(glm::radians(-8.0f), glm::vec3(0,0,1))
+            * glm::translate(-porschePos)
+            * placeProp(porscheModel, porschePos, 4.6f, glm::radians(35.0f));
+        sceneProps.push_back({&porscheModel, porscheM,
+            {glm::vec3(0.72f,0.07f,0.07f), 0.9f, 0.30f}});  // Guards Red, metallic
+    }
+    std::cout << "[PROPS] Zaladowano " << sceneProps.size() << " dekoracji (floorY=0)" << std::endl;
+
+    // Diagnostyka: wypisz AABB kazdego modelu po PreTransformVertices (do strojenia skal).
+    auto logAABB = [](const char* name, const MultiMeshModel& m) {
+        glm::vec3 mn, mx; modelAABB(m, mn, mx); glm::vec3 sz = mx - mn;
+        std::cout << "[AABB] " << name << " size=(" << sz.x << " x " << sz.y << " x " << sz.z
+                  << ")  Y=[" << mn.y << ", " << mx.y << "]" << std::endl;
+    };
+    logAABB("coral.glb", coralModel1);
+    logAABB("Coral 3D Model.glb", coralModel2);
+    logAABB("Coral Piece.glb", coralPiece);
+    logAABB("Crescent Moon Coral.glb", crescentCoral);
+    logAABB("coral_fish.glb", coralFish);
+    logAABB("Deep Sea Fish 3D.glb", deepSeaFish);
+    logAABB("Guppy Fish.glb", guppyFish);
+    logAABB("Shiny Fish.glb", shinyFish);
+    logAABB("Porsche.glb", porscheModel);
 
     // OLE-02: mapy PBR (piasek na dno, zardzewialy metal na kostke)
     {
@@ -1351,6 +1907,50 @@ inline void init(GLFWwindow* window)
     fishColors.push_back(glm::vec3(0.25f, 0.75f, 0.55f)); // zielono-morska
     std::cout << "[NED-04] ryb na splajnach: " << fishes.size() << " (2 sciezki)\n";
 
+    // --- Trzecia sciezka (Sketchfab fish) ---
+    fishSplineC.addControlPoint(glm::vec3(-4.0f, 1.5f,  5.0f));
+    fishSplineC.addControlPoint(glm::vec3( 3.0f, 2.5f,  8.0f));
+    fishSplineC.addControlPoint(glm::vec3( 8.0f, 1.0f,  2.0f));
+    fishSplineC.addControlPoint(glm::vec3( 4.0f, 3.0f, -5.0f));
+    fishSplineC.addControlPoint(glm::vec3(-3.0f, 2.0f, -7.0f));
+    fishSplineC.addControlPoint(glm::vec3(-8.0f, 1.5f, -2.0f));
+    fishSplineC.buildFrames(128);
+
+    // --- Ryby Sketchfab na splajnach ---
+    // FishAnimation(path, speed, tOffset, scale=1, swimPhase) - skala/orientacja idzie
+    // do localFix (fishLocalFix): auto-skala do targetSize + centrowanie + wyrownanie
+    // dlugiej osi ciala do kierunku plyniecia. Rysowane: frameMatrix() * localFix.
+    sketchFish.clear();
+    // headingDeg: obrot wyrownujacy nos do kierunku plyniecia. Wszystkie modele
+    // okazaly sie odwrocone tylem -> 180. Jesli ktoras ryba dalej plynie tylem,
+    // zmien jej headingDeg o 180 (albo +-90 jesli plynie bokiem).
+    auto addSketchFish = [&](Spline* path, float speed, float tOff, MultiMeshModel* model,
+                             float targetSize, float headingDeg, PBRMaterial mat) {
+        SketchFishInstance sf{ FishAnimation(path, speed, tOff, 1.0f, tOff * 6.2831853f), model, mat,
+                               fishLocalFix(*model, targetSize, headingDeg), targetSize };
+        sketchFish.push_back(sf);
+    };
+    // targetSize = dlugosc ryby w jedn. swiata; predkosci podbite, by ruch byl wyrazny.
+    addSketchFish(&debugSpline, 0.060f, 0.15f, &deepSeaFish, 1.8f, 180.0f, {glm::vec3(0.35f,0.55f,0.80f), 0.1f, 0.4f});
+    addSketchFish(&fishSplineB, 0.075f, 0.40f, &guppyFish,   1.0f, 180.0f, {glm::vec3(0.90f,0.65f,0.20f), 0.1f, 0.35f});
+    addSketchFish(&fishSplineC, 0.055f, 0.60f, &shinyFish,   1.4f, 180.0f, {glm::vec3(0.40f,0.75f,0.90f), 0.3f, 0.25f});
+    addSketchFish(&fishSplineC, 0.080f, 0.20f, &deepSeaFish, 1.6f, 180.0f, {glm::vec3(0.25f,0.45f,0.70f), 0.1f, 0.45f});
+    addSketchFish(&debugSpline, 0.090f, 0.80f, &guppyFish,   0.9f, 180.0f, {glm::vec3(0.85f,0.55f,0.15f), 0.1f, 0.3f});
+    std::cout << "[SKETCH] ryb Sketchfab na splajnach: " << sketchFish.size() << "\n";
+
+    // --- Nurek (animacja szkieletowa) ---
+    // ETAP 1: nurek plywa W MIEJSCU w widocznym punkcie, by zweryfikowac skinning.
+    if (diver.load("./models/scene.gltf"))
+    {
+        glm::vec3 sz = diver.aabbMax - diver.aabbMin;
+        float bindH = glm::max(sz.y, 0.0001f);
+        float targetHeight = 2.4f;                       // wysokosc nurka w jedn. swiata
+        diverBaseScale = targetHeight / bindH;
+        diverCenter    = 0.5f * (diver.aabbMin + diver.aabbMax);
+        diverBones.reserve(diver.numBones());
+        std::cout << "[DIVER] baseScale=" << diverBaseScale << " (bindH=" << bindH << ")" << std::endl;
+    }
+
     int w, h; glfwGetFramebufferSize(window, &w, &h);
     framebuffer_size_callback(window, w, h);
 }
@@ -1361,6 +1961,8 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programSkybox);
     shaderLoader.DeleteProgram(programDebugLine);
     shaderLoader.DeleteProgram(programFish);
+    shaderLoader.DeleteProgram(programSketchFish);
+    shaderLoader.DeleteProgram(programSkinned);
     shaderLoader.DeleteProgram(programJelly);
     shaderLoader.DeleteProgram(programWaterOverlay);
     shaderLoader.DeleteProgram(programShadowDepth);  // OLE-04
@@ -1434,6 +2036,24 @@ inline void renderLoop(GLFWwindow* window)
         ImGui::Separator();
         ImGui::Checkbox("Efekt wody (overlay)", &showWaterOverlay);
         ImGui::SliderFloat("Sila efektu wody", &waterOverlayStrength, 0.0f, 1.0f);
+        ImGui::Separator();
+        ImGui::Text("Dekoracje Sketchfab");
+        ImGui::Checkbox("Pokaz dekoracje (korale/ryby/Porsche)", &showProps);
+        ImGui::Text("Props: %d", (int)sceneProps.size());
+        ImGui::Separator();
+        ImGui::Text("NUREK (animacja szkieletowa)");
+        if (diver.valid())
+        {
+            ImGui::Checkbox("Pokaz nurka", &showDiver);
+            ImGui::Text("Meshy: %d  Kosci: %d  Klipy: %d",
+                        (int)diver.meshes().size(), diver.numBones(), diver.numClips());
+            ImGui::SliderInt("Klip animacji", &diverClip, 0, glm::max(0, diver.numClips() - 1));
+            ImGui::SliderFloat("Tempo animacji", &diverAnimSpeed, 0.0f, 3.0f);
+            ImGui::SliderFloat3("Pozycja nurka", (float*)&diverPos, -20.0f, 20.0f);
+            ImGui::SliderFloat3("Obrot (pitch/yaw/roll)", (float*)&diverRotDeg, -180.0f, 180.0f);
+            ImGui::SliderFloat("Skala x", &diverScaleMul, 0.1f, 4.0f);
+        }
+        else ImGui::TextDisabled("(nie zaladowano models/scene.gltf)");
         ImGui::Separator();
         ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
         ImGui::ColorEdit3("Water color", (float*)&waterColor);

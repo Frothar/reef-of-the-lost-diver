@@ -28,6 +28,10 @@ public:
     // Ryba (glowa w lokalnym -Z) patrzy wzdluz tangentu krzywej.
     glm::mat4 modelMatrix() const;
 
+    // Sama macierz ramki PTF (obrot + translacja, bez skali). Uzywana przez ryby
+    // Sketchfab, ktore doklejaja wlasna korekte lokalna (skala/centrowanie/os ciala).
+    glm::mat4 frameMatrix() const;
+
     glm::vec3 position() const;
     float     swimPhase() const { return swimPhaseOffset; }
     float     paramT()    const { return t; }
