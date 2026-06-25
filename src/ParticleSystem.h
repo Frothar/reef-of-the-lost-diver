@@ -86,6 +86,13 @@ public:
 
     int count() const { return (int)particles_.size(); }
 
+    // Zwalnia zasoby GPU (VAO/VBO). Wolane przy zamknieciu aplikacji.
+    void destroy()
+    {
+        if (vbo_) { glDeleteBuffers(1, &vbo_);      vbo_ = 0; }
+        if (vao_) { glDeleteVertexArrays(1, &vao_); vao_ = 0; }
+    }
+
 private:
     std::vector<Particle>  particles_;
     std::vector<glm::vec3> emitters_;

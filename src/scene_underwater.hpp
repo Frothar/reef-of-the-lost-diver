@@ -36,7 +36,6 @@
 
 #include <vector>
 
-#include "Box.cpp"
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -470,31 +469,55 @@ inline void bindShadowUniforms(GLuint program, const glm::mat4& lightSpaceMat)
 // OLE-05: wysyla tablice swiatel punktowych i reflektorow do aktywnego programu.
 inline void bindLightUniforms(GLuint program)
 {
+    // Nazwy uniformow swiatel sa stale - budujemy pelne stringi RAZ (statycznie),
+    // zamiast sklejac je przez std::to_string w kazdej klatce dla kazdego obiektu.
+    struct PointNames { std::string position, color, intensity, constant, linear, quadratic; };
+    struct SpotNames  { std::string position, direction, color, intensity, constant,
+                                    linear, quadratic, innerCutoff, outerCutoff; };
+    static PointNames pn[MAX_POINT_LIGHTS];
+    static SpotNames  sn[MAX_SPOT_LIGHTS];
+    static bool namesBuilt = false;
+    if (!namesBuilt)
+    {
+        for (int i = 0; i < MAX_POINT_LIGHTS; ++i)
+        {
+            std::string b = "pointLights[" + std::to_string(i) + "]";
+            pn[i] = { b + ".position", b + ".color", b + ".intensity",
+                      b + ".constant", b + ".linear", b + ".quadratic" };
+        }
+        for (int i = 0; i < MAX_SPOT_LIGHTS; ++i)
+        {
+            std::string b = "spotLights[" + std::to_string(i) + "]";
+            sn[i] = { b + ".position", b + ".direction", b + ".color", b + ".intensity",
+                      b + ".constant", b + ".linear", b + ".quadratic",
+                      b + ".innerCutoff", b + ".outerCutoff" };
+        }
+        namesBuilt = true;
+    }
+
     glUniform1i(glGetUniformLocation(program, "numPointLights"), numPointLights);
     for (int i = 0; i < numPointLights; ++i)
     {
-        std::string base = "pointLights[" + std::to_string(i) + "]";
-        glUniform3fv(glGetUniformLocation(program, (base + ".position").c_str()),  1, (float*)&pointLights[i].position);
-        glUniform3fv(glGetUniformLocation(program, (base + ".color").c_str()),     1, (float*)&pointLights[i].color);
-        glUniform1f(glGetUniformLocation(program,  (base + ".intensity").c_str()),  pointLights[i].intensity);
-        glUniform1f(glGetUniformLocation(program,  (base + ".constant").c_str()),   pointLights[i].constant);
-        glUniform1f(glGetUniformLocation(program,  (base + ".linear").c_str()),     pointLights[i].linear);
-        glUniform1f(glGetUniformLocation(program,  (base + ".quadratic").c_str()),  pointLights[i].quadratic);
+        glUniform3fv(glGetUniformLocation(program, pn[i].position.c_str()),  1, (float*)&pointLights[i].position);
+        glUniform3fv(glGetUniformLocation(program, pn[i].color.c_str()),     1, (float*)&pointLights[i].color);
+        glUniform1f(glGetUniformLocation(program,  pn[i].intensity.c_str()),  pointLights[i].intensity);
+        glUniform1f(glGetUniformLocation(program,  pn[i].constant.c_str()),   pointLights[i].constant);
+        glUniform1f(glGetUniformLocation(program,  pn[i].linear.c_str()),     pointLights[i].linear);
+        glUniform1f(glGetUniformLocation(program,  pn[i].quadratic.c_str()),  pointLights[i].quadratic);
     }
 
     glUniform1i(glGetUniformLocation(program, "numSpotLights"), numSpotLights);
     for (int i = 0; i < numSpotLights; ++i)
     {
-        std::string base = "spotLights[" + std::to_string(i) + "]";
-        glUniform3fv(glGetUniformLocation(program, (base + ".position").c_str()),   1, (float*)&spotLights[i].position);
-        glUniform3fv(glGetUniformLocation(program, (base + ".direction").c_str()),  1, (float*)&spotLights[i].direction);
-        glUniform3fv(glGetUniformLocation(program, (base + ".color").c_str()),      1, (float*)&spotLights[i].color);
-        glUniform1f(glGetUniformLocation(program,  (base + ".intensity").c_str()),   spotLights[i].intensity);
-        glUniform1f(glGetUniformLocation(program,  (base + ".constant").c_str()),    spotLights[i].constant);
-        glUniform1f(glGetUniformLocation(program,  (base + ".linear").c_str()),      spotLights[i].linear);
-        glUniform1f(glGetUniformLocation(program,  (base + ".quadratic").c_str()),   spotLights[i].quadratic);
-        glUniform1f(glGetUniformLocation(program,  (base + ".innerCutoff").c_str()), spotLights[i].innerCutoff);
-        glUniform1f(glGetUniformLocation(program,  (base + ".outerCutoff").c_str()), spotLights[i].outerCutoff);
+        glUniform3fv(glGetUniformLocation(program, sn[i].position.c_str()),   1, (float*)&spotLights[i].position);
+        glUniform3fv(glGetUniformLocation(program, sn[i].direction.c_str()),  1, (float*)&spotLights[i].direction);
+        glUniform3fv(glGetUniformLocation(program, sn[i].color.c_str()),      1, (float*)&spotLights[i].color);
+        glUniform1f(glGetUniformLocation(program,  sn[i].intensity.c_str()),   spotLights[i].intensity);
+        glUniform1f(glGetUniformLocation(program,  sn[i].constant.c_str()),    spotLights[i].constant);
+        glUniform1f(glGetUniformLocation(program,  sn[i].linear.c_str()),      spotLights[i].linear);
+        glUniform1f(glGetUniformLocation(program,  sn[i].quadratic.c_str()),   spotLights[i].quadratic);
+        glUniform1f(glGetUniformLocation(program,  sn[i].innerCutoff.c_str()), spotLights[i].innerCutoff);
+        glUniform1f(glGetUniformLocation(program,  sn[i].outerCutoff.c_str()), spotLights[i].outerCutoff);
     }
 }
 
@@ -542,7 +565,7 @@ inline void drawPBRObject(Core::RenderContext& context, glm::mat4 modelMatrix,
 // phaseOffset pozwala desynchronizowac kilka ryb (rozne fazy machania ogonem).
 inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
                      const PBRMaterial& material, float time, float phaseOffset,
-                     const glm::mat4& lightSpaceMat)
+                     const glm::mat4& lightSpaceMat, float waveSpeed)
 {
     glUseProgram(programFish);
 
@@ -568,7 +591,7 @@ inline void drawFish(Core::RenderContext& context, glm::mat4 modelMatrix,
     glUniform1f(glGetUniformLocation(programFish, "time"),          time + phaseOffset);
     glUniform1f(glGetUniformLocation(programFish, "waveAmplitude"), fishParams.waveAmplitude);
     glUniform1f(glGetUniformLocation(programFish, "waveFrequency"), fishParams.waveFrequency);
-    glUniform1f(glGetUniformLocation(programFish, "waveSpeed"),     fishParams.waveSpeed);
+    glUniform1f(glGetUniformLocation(programFish, "waveSpeed"),     waveSpeed);
     glUniform1f(glGetUniformLocation(programFish, "fishLength"),    fishParams.fishLength);
     glUniform1f(glGetUniformLocation(programFish, "finAmplitude"),  fishParams.finAmplitude);
 
@@ -765,6 +788,32 @@ inline void drawJellyfish(Core::RenderContext& context, glm::mat4 modelMatrix,
 
     Core::DrawContext(context);
     glUseProgram(0);
+}
+
+// NED-06: jedno zrodlo prawdy o rozmieszczeniu meduz - wspoldzielone przez
+// przebieg cieni i przebieg glowny. Bez tego cien meduzy odklejal sie od meduzy,
+// bo pozycje byly skopiowane w dwoch miejscach.
+static const int       NUM_JELLYFISH = 3;
+static const glm::vec3 JELLY_BASE[NUM_JELLYFISH] = {
+    glm::vec3(-4.5f, 0.5f, -2.0f),
+    glm::vec3( 2.5f, 1.0f,  3.5f),
+    glm::vec3( 5.0f, 0.0f, -3.5f),
+};
+static const float JELLY_PHASE[NUM_JELLYFISH] = { 0.0f, 2.1f, 4.0f };
+static const float JELLY_SCALE[NUM_JELLYFISH] = { 1.6f, 1.2f, 2.0f };
+
+// Macierz modelu meduzy i w danej chwili (pulsujace bujanie w pionie, czulki
+// nie wbijaja sie w dno). Identyczna w obu przebiegach renderowania.
+inline glm::mat4 jellyfishModelMatrix(int i, float time)
+{
+    const float seabedTopY = 0.0f, margin = 0.15f;
+    float ph  = time * jellyParams.pulseSpeed + JELLY_PHASE[i];
+    float bob = jellyParams.bobAmplitude * std::sin(ph);
+    float tentacleReach = jellyParams.tentacleLength * JELLY_SCALE[i];
+    float minCenterY = seabedTopY + margin + tentacleReach + jellyParams.bobAmplitude;
+    float centerY = glm::max(JELLY_BASE[i].y, minCenterY) + bob;
+    return glm::translate(glm::vec3(JELLY_BASE[i].x, centerY, JELLY_BASE[i].z))
+         * glm::scale(glm::vec3(JELLY_SCALE[i]));
 }
 
 // Podglad splajnu jako linia (NED-01) - sluzy do wizualnej kontroli gladkosci.
@@ -1052,23 +1101,8 @@ inline void renderScene(GLFWwindow* window)
         }
         if (showJelly && jellyContext.vertexArray != 0)
         {
-            glm::vec3 jellyBase[3] = {
-                glm::vec3(-4.5f, 0.5f, -2.0f), glm::vec3(2.5f, 1.0f, 3.5f), glm::vec3(5.0f, 0.0f, -3.5f)
-            };
-            float jellyPhase[3] = { 0.0f, 2.1f, 4.0f };
-            float jellyScale[3] = { 1.6f, 1.2f, 2.0f };
-            const float seabedTopY = 0.0f, margin = 0.15f;
-            for (int i = 0; i < 3; ++i)
-            {
-                float ph = time * jellyParams.pulseSpeed + jellyPhase[i];
-                float bob = jellyParams.bobAmplitude * std::sin(ph);
-                float tentacleReach = jellyParams.tentacleLength * jellyScale[i];
-                float minCenterY = seabedTopY + margin + tentacleReach + jellyParams.bobAmplitude;
-                float centerY = glm::max(jellyBase[i].y, minCenterY) + bob;
-                glm::mat4 m = glm::translate(glm::vec3(jellyBase[i].x, centerY, jellyBase[i].z))
-                            * glm::scale(glm::vec3(jellyScale[i]));
-                drawShadowDepth(jellyContext, m, lightSpaceMat);
-            }
+            for (int i = 0; i < NUM_JELLYFISH; ++i)
+                drawShadowDepth(jellyContext, jellyfishModelMatrix(i, time), lightSpaceMat);
         }
 
         // Dekoracje Sketchfab
@@ -1076,7 +1110,22 @@ inline void renderScene(GLFWwindow* window)
         {
             for (auto& prop : sceneProps)
                 drawMultiMeshShadow(*prop.model, prop.transform, lightSpaceMat);
+
+            // Ryby Sketchfab na splajnach - cien sztywny (bez deformacji ogona).
+            // Macierz swiata = frameMatrix (ramka PTF) * localFix (normalizacja modelu).
+            for (auto& sf : sketchFish)
+                drawMultiMeshShadow(*sf.model, sf.anim.frameMatrix() * sf.localFix, lightSpaceMat);
         }
+
+        // Wodorosty - cien sztywny (falowanie liczone tylko w przebiegu glownym).
+        if (showSeaweed && !seaweedInstances.empty())
+        {
+            for (const auto& sw : seaweedInstances)
+                drawMultiMeshShadow(seaweedModel, sw.transform, lightSpaceMat);
+        }
+
+        // Uwaga: nurek (skinning) celowo NIE rzuca cienia - wymagaloby to osobnego
+        // skinowanego shadera glebi; sztywny cien bind-pose (T-poza) wygladalby zle.
 
         glDisable(GL_CULL_FACE);
         glCullFace(GL_BACK); // przywroc domyslne
@@ -1136,38 +1185,19 @@ inline void renderScene(GLFWwindow* window)
             PBRMaterial mat = fishMaterial;
             mat.albedo = (i < fishColors.size()) ? fishColors[i] : fishMaterial.albedo;
 
-            fishParams.waveSpeed = scared ? baseWave * 2.5f : baseWave; // frenzy ogona (per-ryba)
-            drawFish(fishMesh, fishes[i].modelMatrix(), mat, time, fishes[i].swimPhase(), lightSpaceMat);
+            // Frenzy ogona liczony per-ryba i przekazany jako parametr - bez mutacji
+            // globalnego fishParams (panel ImGui czyta oryginalna wartosc).
+            float effWave = scared ? baseWave * 2.5f : baseWave;
+            drawFish(fishMesh, fishes[i].modelMatrix(), mat, time, fishes[i].swimPhase(), lightSpaceMat, effWave);
         }
-        fishParams.waveSpeed = baseWave; // przywroc (panel ImGui czyta oryginal)
     }
 
     // --- Meduzy (NED-06) ---
     if (showJelly && jellyContext.vertexArray != 0)
     {
-        glm::vec3 jellyBase[3] = {
-            glm::vec3(-4.5f, 0.5f, -2.0f),
-            glm::vec3( 2.5f, 1.0f,  3.5f),
-            glm::vec3( 5.0f, 0.0f, -3.5f),
-        };
-        float jellyPhase[3] = { 0.0f, 2.1f, 4.0f };
-        float jellyScale[3] = { 1.6f, 1.2f, 2.0f };
-        const float seabedTopY = 0.0f;
-        const float margin     = 0.15f;
-
-        for (int i = 0; i < 3; ++i)
-        {
-            float ph  = time * jellyParams.pulseSpeed + jellyPhase[i];
-            float bob = jellyParams.bobAmplitude * std::sin(ph);
-
-            float tentacleReach = jellyParams.tentacleLength * jellyScale[i];
-            float minCenterY = seabedTopY + margin + tentacleReach + jellyParams.bobAmplitude;
-            float centerY = glm::max(jellyBase[i].y, minCenterY) + bob;
-
-            glm::mat4 m = glm::translate(glm::vec3(jellyBase[i].x, centerY, jellyBase[i].z))
-                        * glm::scale(glm::vec3(jellyScale[i]));
-            drawJellyfish(jellyContext, m, jellyMaterial, time, jellyPhase[i], lightSpaceMat);
-        }
+        for (int i = 0; i < NUM_JELLYFISH; ++i)
+            drawJellyfish(jellyContext, jellyfishModelMatrix(i, time), jellyMaterial,
+                          time, JELLY_PHASE[i], lightSpaceMat);
     }
 
     // --- Dekoracje Sketchfab (korale, Porsche) ---
@@ -1423,7 +1453,11 @@ inline void removeWaterPlanes(MultiMeshModel& model)
             {
                 std::cout << "[FILTER] Usunieto plaska podloge: Y=" << yExtent
                           << " XZ=" << xzExtent << std::endl;
-                if (ctx.albedoTex) glDeleteTextures(1, &ctx.albedoTex);
+                // Zwolnij wszystkie zasoby GPU usuwanego mesha (nie tylko teksture).
+                if (ctx.albedoTex)         glDeleteTextures(1, &ctx.albedoTex);
+                if (ctx.vertexArray)       glDeleteVertexArrays(1, &ctx.vertexArray);
+                if (ctx.vertexBuffer)      glDeleteBuffers(1, &ctx.vertexBuffer);
+                if (ctx.vertexIndexBuffer) glDeleteBuffers(1, &ctx.vertexIndexBuffer);
                 ++removed;
                 return true;
             }
@@ -2146,6 +2180,33 @@ inline void init(GLFWwindow* window)
     framebuffer_size_callback(window, w, h);
 }
 
+// Zwalnia zasoby GPU pojedynczego RenderContext (geometria + osadzona tekstura).
+inline void freeRenderContext(Core::RenderContext& ctx)
+{
+    if (ctx.albedoTex)         glDeleteTextures(1, &ctx.albedoTex);
+    if (ctx.vertexArray)       glDeleteVertexArrays(1, &ctx.vertexArray);
+    if (ctx.vertexBuffer)      glDeleteBuffers(1, &ctx.vertexBuffer);
+    if (ctx.vertexIndexBuffer) glDeleteBuffers(1, &ctx.vertexIndexBuffer);
+    ctx.albedoTex = ctx.vertexArray = ctx.vertexBuffer = ctx.vertexIndexBuffer = 0;
+}
+
+inline void freeMultiMesh(MultiMeshModel& model)
+{
+    for (auto& ctx : model) freeRenderContext(ctx);
+    model.clear();
+}
+
+// OLE-02: zwalnia komplet map PBR (Color/Metalness/Roughness/AO/Normal).
+inline void freePBRTextureSet(PBRTextureSet& t)
+{
+    if (t.albedoMap)    glDeleteTextures(1, &t.albedoMap);
+    if (t.metallicMap)  glDeleteTextures(1, &t.metallicMap);
+    if (t.roughnessMap) glDeleteTextures(1, &t.roughnessMap);
+    if (t.aoMap)        glDeleteTextures(1, &t.aoMap);
+    if (t.normalMap)    glDeleteTextures(1, &t.normalMap);
+    t = PBRTextureSet();
+}
+
 inline void shutdown(GLFWwindow* window)
 {
     shaderLoader.DeleteProgram(programPBR);
@@ -2158,6 +2219,8 @@ inline void shutdown(GLFWwindow* window)
     shaderLoader.DeleteProgram(programWaterOverlay);
     shaderLoader.DeleteProgram(programShadowDepth);  // OLE-04
     shaderLoader.DeleteProgram(programPostprocess);   // OLE-07
+    shaderLoader.DeleteProgram(programParticle);      // MRZ-07
+    shaderLoader.DeleteProgram(programSeaweed);
     glDeleteFramebuffers(1, &shadowFBO);              // OLE-04
     glDeleteTextures(1, &shadowDepthTex);             // OLE-04
     // OLE-07: scene FBO
@@ -2175,6 +2238,41 @@ inline void shutdown(GLFWwindow* window)
     glDeleteBuffers(1, &ptfAxesVBO);
     glDeleteVertexArrays(1, &waterQuadVAO);
     glDeleteBuffers(1, &waterQuadVBO);
+
+    // Skybox
+    glDeleteVertexArrays(1, &skyboxVAO);
+    glDeleteBuffers(1, &skyboxVBO);
+    glDeleteTextures(1, &skyboxCubemap);
+
+    // Czastki (MRZ-07) + nurek (animacja szkieletowa)
+    bubbles.destroy();
+    diver.destroy();
+
+    // Pojedyncze modele (OBJ)
+    freeRenderContext(sphereContext);
+    freeRenderContext(cubeContext);
+    freeRenderContext(groundContext);
+    freeRenderContext(fishContext);
+    freeRenderContext(jellyContext);
+
+    // Modele wieloczesciowe (GLB ze Sketchfab) + ich osadzone tekstury
+    freeMultiMesh(coralModel1);
+    freeMultiMesh(coralModel2);
+    freeMultiMesh(coralPiece);
+    freeMultiMesh(crescentCoral);
+    freeMultiMesh(coralFish);
+    freeMultiMesh(deepSeaFish);
+    freeMultiMesh(guppyFish);
+    freeMultiMesh(shinyFish);
+    freeMultiMesh(porscheModel);
+    freeMultiMesh(pirateShipModel);
+    freeMultiMesh(oldShipModel);
+    freeMultiMesh(seaweedModel);
+
+    // OLE-02: mapy PBR (piasek/dno + zardzewialy metal)
+    freePBRTextureSet(groundMaterial.tex);
+    freePBRTextureSet(metalMaterial.tex);
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

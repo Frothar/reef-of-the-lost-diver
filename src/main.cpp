@@ -4,6 +4,8 @@
 #include "glm.hpp"
 #include "ext.hpp"
 #include <iostream>
+#include <cstdlib>
+#include <ctime>
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -17,6 +19,8 @@
 
 int main(int argc, char** argv)
 {
+    std::srand((unsigned)std::time(nullptr)); // ziarno dla czastek (bubbles) - rozny uklad co uruchomienie
+
     if (!glfwInit())
     {
         std::cout << "Failed to initialize GLFW" << std::endl;

@@ -16,8 +16,12 @@ std::string Shader_Loader::ReadShader(char *filename)
 
 	if (!file.good())
 	{
-		std::cout << "Can't read file " << filename << std::endl;
-		std::terminate();
+		// Najczestsza przyczyna: zly katalog roboczy (sciezki sa wzgledne wzgledem
+		// folderu projektu). Zamiast ubic caly proces (std::terminate) zwracamy
+		// pusty kod - CreateProgram wykryje to i zwroci 0 z czytelnym komunikatem.
+		std::cout << "ERROR: nie mozna otworzyc pliku shadera: " << filename
+		          << " (sprawdz katalog roboczy = folder projektu)" << std::endl;
+		return std::string();
 	}
 
 	file.seekg(0, std::ios::end);
@@ -65,8 +69,26 @@ GLuint Shader_Loader::CreateProgram(char* vertexShaderFilename,
 	std::string vertex_shader_code = ReadShader(vertexShaderFilename);
 	std::string fragment_shader_code = ReadShader(fragmentShaderFilename);
 
+	// Brak pliku -> nie probujemy kompilowac (zwracamy 0, caller moze to wykryc).
+	if (vertex_shader_code.empty() || fragment_shader_code.empty())
+	{
+		std::cout << "Shader Loader: pominieto program (" << vertexShaderFilename
+		          << " / " << fragmentShaderFilename << ")" << std::endl;
+		return 0;
+	}
+
 	GLuint vertex_shader = CreateShader(GL_VERTEX_SHADER, vertex_shader_code, "vertex shader");
 	GLuint fragment_shader = CreateShader(GL_FRAGMENT_SHADER, fragment_shader_code, "fragment shader");
+
+	// Blad kompilacji (CreateShader zwrocil 0) -> nie linkujemy, zwracamy 0.
+	if (vertex_shader == 0 || fragment_shader == 0)
+	{
+		if (vertex_shader)   glDeleteShader(vertex_shader);
+		if (fragment_shader) glDeleteShader(fragment_shader);
+		std::cout << "Shader Loader: blad kompilacji (" << vertexShaderFilename
+		          << " / " << fragmentShaderFilename << ")" << std::endl;
+		return 0;
+	}
 
 	int link_result = 0;
 	//stworz shader

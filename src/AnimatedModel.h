@@ -72,6 +72,9 @@ public:
     // animSpeed skaluje tempo. Zwraca przez 'out' (uzupelnia/zmienia rozmiar).
     void computePose(int clip, float timeSeconds, float animSpeed, std::vector<glm::mat4>& out) const;
 
+    // Zwalnia zasoby GPU wszystkich meshy (VAO/VBO/EBO). Wolane przy zamknieciu.
+    void destroy();
+
     const std::vector<SkinnedMesh>& meshes() const { return skinnedMeshes; }
     int  numClips() const { return (int)clips.size(); }
     int  numBones() const { return (int)boneCount; }

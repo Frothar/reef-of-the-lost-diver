@@ -217,6 +217,18 @@ bool AnimatedModel::load(const std::string& path)
     return true;
 }
 
+void AnimatedModel::destroy()
+{
+    for (auto& sm : skinnedMeshes)
+    {
+        if (sm.ebo) glDeleteBuffers(1, &sm.ebo);
+        if (sm.vbo) glDeleteBuffers(1, &sm.vbo);
+        if (sm.vao) glDeleteVertexArrays(1, &sm.vao);
+    }
+    skinnedMeshes.clear();
+    loaded = false;
+}
+
 // --- liczenie pozy -----------------------------------------------------------
 void AnimatedModel::computeGlobal(const NodeData& node, const glm::mat4& parentGlobal,
                                   const AnimClip& clip, float timeTicks,
