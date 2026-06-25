@@ -121,6 +121,7 @@ namespace {
     GLuint programWaterOverlay = 0; // pelnoekranowy efekt wody
     GLuint programShadowDepth  = 0; // OLE-04 przebieg cieni
     GLuint programPostprocess  = 0; // OLE-07 post-processing podwodny
+    GLuint programSeaweed      = 0; // wodorosty - falowanie
 
     // --- OLE-07: Post-processing FBO (kolor + glebia) -------------------------
     GLuint sceneFBO = 0;
@@ -174,6 +175,21 @@ namespace {
     MultiMeshModel guppyFish;       // Guppy Fish.glb
     MultiMeshModel shinyFish;       // Shiny Fish.glb
     MultiMeshModel porscheModel;    // Porsche 911 Turbo 1975.glb
+    MultiMeshModel pirateShipModel; // Stylized Pirate Ship.glb
+    MultiMeshModel oldShipModel;    // Old Ship.glb
+    MultiMeshModel seaweedModel;    // Sea Weed 3D Model.glb
+
+    // --- Wodorosty -----------------------------------------------------------
+    struct SeaweedInstance {
+        glm::mat4 transform; // prekompilowana macierz (placeProp)
+        float     seed;      // offset fazy (by nie falowaly synchronicznie)
+    };
+    std::vector<SeaweedInstance> seaweedInstances;
+    float seaweedSwayAmplitude = 0.18f;
+    float seaweedSwaySpeed     = 1.1f;
+    bool  showSeaweed          = true;
+    float seaweedMinY = 0.0f;
+    float seaweedMaxY = 1.0f;
 
     std::vector<SceneProp> sceneProps;
     bool showProps = true;
@@ -1161,6 +1177,58 @@ inline void renderScene(GLFWwindow* window)
             drawMultiMeshPBR(*prop.model, prop.transform, prop.material, lightSpaceMat);
     }
 
+    // --- Wodorosty (animacja falowania) ---
+    if (showSeaweed && !seaweedInstances.empty() && programSeaweed != 0)
+    {
+        glUseProgram(programSeaweed);
+        glm::mat4 view = createCameraMatrix();
+        glm::mat4 projection = createPerspectiveMatrix();
+        glUniformMatrix4fv(glGetUniformLocation(programSeaweed, "view"),       1, GL_FALSE, (float*)&view);
+        glUniformMatrix4fv(glGetUniformLocation(programSeaweed, "projection"), 1, GL_FALSE, (float*)&projection);
+        glUniform3fv(glGetUniformLocation(programSeaweed, "cameraPos"),  1, (float*)&camera.position);
+        glUniform3fv(glGetUniformLocation(programSeaweed, "lightDir"),   1, (float*)&sunDir);
+        glUniform3fv(glGetUniformLocation(programSeaweed, "lightColor"), 1, (float*)&sunColor);
+        glUniform3fv(glGetUniformLocation(programSeaweed, "fogColor"),   1, (float*)&waterColor);
+        glUniform1f(glGetUniformLocation(programSeaweed, "fogDensity"),  fogDensity);
+        glUniform1f(glGetUniformLocation(programSeaweed, "time"),           time);
+        glUniform1f(glGetUniformLocation(programSeaweed, "swayAmplitude"),  seaweedSwayAmplitude);
+        glUniform1f(glGetUniformLocation(programSeaweed, "swaySpeed"),      seaweedSwaySpeed);
+        glUniform1f(glGetUniformLocation(programSeaweed, "swayFreq"),       1.0f);
+        bindShadowUniforms(programSeaweed, lightSpaceMat);
+        bindLightUniforms(programSeaweed);
+
+        for (const auto& sw : seaweedInstances)
+        {
+            glUniformMatrix4fv(glGetUniformLocation(programSeaweed, "model"), 1, GL_FALSE, (float*)&sw.transform);
+            glUniform1f(glGetUniformLocation(programSeaweed, "seedOffset"),   sw.seed);
+            glUniform1f(glGetUniformLocation(programSeaweed, "minY"),         seaweedMinY);
+            glUniform1f(glGetUniformLocation(programSeaweed, "maxY"),         seaweedMaxY);
+
+            for (auto& ctx : seaweedModel)
+            {
+                PBRMaterial m;
+                m.albedo    = glm::vec3(0.10f, 0.52f, 0.18f); // soczysty zielony
+                m.metallic  = 0.0f;
+                m.roughness = 0.75f;
+                if (ctx.albedoTex) { m.tex.albedoMap = ctx.albedoTex; m.tex.useAlbedoMap = true; }
+                // Brak uniformow albedo/metallic/roughness: bindPBRMaterial je ustawia
+                glUniform3fv(glGetUniformLocation(programSeaweed, "albedo"),    1, (float*)&m.albedo);
+                glUniform1f(glGetUniformLocation(programSeaweed, "metallic"),   m.metallic);
+                glUniform1f(glGetUniformLocation(programSeaweed, "roughness"),  m.roughness);
+                glUniform2fv(glGetUniformLocation(programSeaweed, "uvScale"),   1, (float*)&m.uvScale);
+                glUniform1i(glGetUniformLocation(programSeaweed, "useAlbedoMap"),    m.tex.useAlbedoMap ? 1 : 0);
+                glUniform1i(glGetUniformLocation(programSeaweed, "useMetallicMap"),  0);
+                glUniform1i(glGetUniformLocation(programSeaweed, "useRoughnessMap"), 0);
+                glUniform1i(glGetUniformLocation(programSeaweed, "useAoMap"),        0);
+                glUniform1i(glGetUniformLocation(programSeaweed, "useNormalMap"),    0);
+                if (m.tex.useAlbedoMap)
+                    Core::SetActiveTexture(ctx.albedoTex, "albedoMap", programSeaweed, 0);
+                Core::DrawContext(ctx);
+            }
+        }
+        glUseProgram(0);
+    }
+
     // --- Ryby Sketchfab na splajnach ---
     if (showProps)
     {
@@ -1337,6 +1405,33 @@ inline bool loadMultiMeshModel(const std::string& path, MultiMeshModel& model)
     std::cout << "Loaded multi-mesh: " << path << " (" << scene->mNumMeshes
               << " meshes, " << totalTris << " tris, " << texCount << " tekstur)" << std::endl;
     return true;
+}
+
+// Usuwa z multi-mesh modelu mesze bedace plaska podloga/woda (typowe dla modeli Sketchfab).
+// Wykrywa mesze, ktorych rozpitosc w Y jest znikoma w porownaniu do XZ - to plaszczyzy wody.
+inline void removeWaterPlanes(MultiMeshModel& model)
+{
+    int removed = 0;
+    model.erase(
+        std::remove_if(model.begin(), model.end(), [&](const Core::RenderContext& ctx) {
+            glm::vec3 sz = ctx.aabbMax - ctx.aabbMin;
+            float yExtent = sz.y;
+            float xzExtent = glm::max(sz.x, sz.z);
+            // Mesh jest "plaska podloga" jezeli: rozpitosc Y < 1% rozpitosci XZ
+            // i rozpitosc XZ jest istotna (nie jest drobnym detalem)
+            if (xzExtent > 0.01f && yExtent / xzExtent < 0.01f)
+            {
+                std::cout << "[FILTER] Usunieto plaska podloge: Y=" << yExtent
+                          << " XZ=" << xzExtent << std::endl;
+                if (ctx.albedoTex) glDeleteTextures(1, &ctx.albedoTex);
+                ++removed;
+                return true;
+            }
+            return false;
+        }),
+        model.end());
+    if (removed > 0)
+        std::cout << "[FILTER] Usunieto " << removed << " planych meshy (woda/podloga)" << std::endl;
 }
 
 // AABB calego wieloczesciowego modelu (suma AABB sub-meshy, po PreTransformVertices).
@@ -1596,6 +1691,8 @@ inline void processInput(GLFWwindow* window)
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) camera.addRoll(roll);
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) camera.addRoll(-roll);
 
+
+
         // Nie pozwol kamerze wplynac pod piasek
         const float minCameraY = 0.4f;
         if (camera.position.y < minCameraY)
@@ -1674,6 +1771,8 @@ inline void init(GLFWwindow* window)
         (char*)"shaders/postprocess.vert", (char*)"shaders/postprocess.frag");
     programParticle = shaderLoader.CreateProgram(
         (char*)"shaders/particle.vert", (char*)"shaders/particle.frag");
+    programSeaweed = shaderLoader.CreateProgram(
+        (char*)"shaders/seaweed.vert", (char*)"shaders/pbr.frag");
 
     // MRZ-07: babelki - emitery przy dnie (kominy/wybicia z piasku)
     {
@@ -1708,6 +1807,13 @@ inline void init(GLFWwindow* window)
     loadMultiMeshModel("./models/Guppy Fish.glb", guppyFish);
     loadMultiMeshModel("./models/Shiny Fish.glb", shinyFish);
     loadMultiMeshModel("./models/Porsche 911 Turbo 1975.glb", porscheModel);
+    removeWaterPlanes(porscheModel);     // usun podstawke/podloge
+    loadMultiMeshModel("./models/Stylized Pirate Ship.glb", pirateShipModel);
+    removeWaterPlanes(pirateShipModel);  // usun wbudowana podloge wody
+    loadMultiMeshModel("./models/Old Ship.glb", oldShipModel);
+    removeWaterPlanes(oldShipModel);     // usun ewentualna podloge
+    loadMultiMeshModel("./models/Sea Weed 3D Model.glb", seaweedModel);
+    std::cout << "[SEAWEED] Zaladowano model: " << seaweedModel.size() << " meshes" << std::endl;
 
     // Rozmieszczenie dekoracji na scenie.
     // Dno (cube.obj ma wierzcholki +-10): translate(0,-2,0)*scale(40,0.2,40)
@@ -1738,11 +1844,94 @@ inline void init(GLFWwindow* window)
         glm::mat4 porscheM = glm::translate(porschePos)
             * glm::rotate(glm::radians(-8.0f), glm::vec3(0,0,1))
             * glm::translate(-porschePos)
-            * placeProp(porscheModel, porschePos, 4.6f, glm::radians(35.0f));
+            * placeProp(porscheModel, porschePos, 13.8f, glm::radians(35.0f));
         sceneProps.push_back({&porscheModel, porscheM,
             {glm::vec3(0.72f,0.07f,0.07f), 0.9f, 0.30f}});  // Guards Red, metallic
     }
+
+    // === STATEK PIRACKI (zatopiony wrak) ===
+    // Umieszczony na (-50, floor, 35) - daleko od korali i Porsche.
+    // Lekko przechylony na bok (-10 st) i osadzony na dnie jak wrak.
+    // targetSize = 80 (duzy statek piracki, widoczny z daleka)
+    {
+        glm::vec3 shipPos(-50.0f, floorY, 35.0f);
+        glm::mat4 shipM = glm::translate(shipPos)
+            * glm::rotate(glm::radians(-10.0f), glm::vec3(0,0,1))  // przechyl na bok
+            * glm::translate(-shipPos)
+            * placeProp(pirateShipModel, shipPos, 80.0f, glm::radians(25.0f));
+        sceneProps.push_back({&pirateShipModel, shipM,
+            {glm::vec3(0.55f, 0.35f, 0.20f), 0.1f, 0.75f}});  // drewniany, matowy
+    }
+
+    // === OLD SHIP (stary statek, blizej niz pirate ship, po drugiej stronie) ===
+    {
+        glm::vec3 oldShipPos(30.0f, floorY, -25.0f);
+        glm::mat4 oldShipM = glm::translate(oldShipPos)
+            * glm::rotate(glm::radians(6.0f), glm::vec3(0,0,1))   // lekki przechyl
+            * glm::translate(-oldShipPos)
+            * placeProp(oldShipModel, oldShipPos, 60.0f, glm::radians(-35.0f));
+        sceneProps.push_back({&oldShipModel, oldShipM,
+            {glm::vec3(0.45f, 0.30f, 0.18f), 0.15f, 0.80f}});  // stare drewno
+    }
     std::cout << "[PROPS] Zaladowano " << sceneProps.size() << " dekoracji (floorY=0)" << std::endl;
+
+    // --- Wodorosty: scatter instancji wokol mapy ---
+    // Pozycje omijaja duze modele (statki, auta). Skala zmniejszona ~3x (od 0.3 do 1.5).
+    seaweedInstances.clear();
+    struct SwPos { float x, z, scale, yaw, seed; };
+    const SwPos swPositions[] = {
+        // --- Centrum / okolice korali (omijajac Porsche przy 15, -10) ---
+        { -7.0f,  -4.0f, 0.8f, 0.2f,  0.0f },
+        { -5.5f,   2.0f, 0.6f, 1.1f,  1.3f },
+        {  4.5f,  -2.5f, 1.1f, 0.7f,  2.7f },
+        {  2.0f,   5.0f, 0.5f, 2.3f,  0.9f },
+        { -1.0f,  -6.0f, 0.7f, 3.0f,  4.1f },
+        {  8.0f,   3.0f, 0.9f, 0.4f,  1.8f },
+        { -9.0f,   6.0f, 1.2f, 1.7f,  3.3f },
+        {  6.0f,  -7.0f, 0.4f, 0.9f,  5.0f },
+        { -3.0f,   9.0f, 0.7f, 2.6f,  0.4f },
+        { -11.0f, -2.0f, 0.6f, 0.6f,  3.7f },
+        {  0.0f,  11.0f, 0.9f, 3.5f,  1.1f },
+        {  9.0f,   8.0f, 0.5f, 2.0f,  4.4f },
+        
+        // --- Droga w lewo-gore (-X, +Z) daleko od Pirate Ship (-50, 35) ---
+        {-14.0f,   2.0f, 1.4f, 0.3f,  2.5f },
+        {-20.0f,   8.0f, 1.2f, 1.9f,  0.7f },
+        {-26.0f,  12.0f, 1.0f, 0.8f,  3.9f },
+        {-17.0f,  15.0f, 0.6f, 0.5f,  4.8f },
+        {-10.0f,  20.0f, 0.8f, 1.6f,  1.0f },
+
+        // --- Droga na prawo-dol (+X, -Z) z dala od Old Ship (30, -25) ---
+        { 18.0f, -20.0f, 0.7f, 2.1f,  0.6f },
+        {  8.0f, -18.0f, 0.6f, 3.3f,  0.8f },
+        
+        // --- Peryferia mapy (gestsze zarosla, ale na uboczu) ---
+        {-15.0f, -12.0f, 1.5f, 1.3f,  3.6f },
+        { 13.0f,  14.0f, 1.3f, 0.7f,  0.3f },
+        { -8.0f,  16.0f, 0.8f, 2.9f,  5.1f },
+        { 18.0f,  10.0f, 0.6f, 1.6f,  2.6f },
+        {-18.0f,  -8.0f, 1.1f, 0.1f,  4.3f },
+        {  5.0f,  18.0f, 0.9f, 2.2f,  1.9f },
+        {-12.0f,  -17.0f, 1.2f, 3.4f,  0.5f },
+        { 22.0f,   5.0f, 0.4f, 1.1f,  3.8f },
+        { -4.0f, -18.0f, 1.3f, 2.0f,  2.4f },
+        { 10.0f,  16.0f, 0.7f, 0.8f,  1.7f },
+        { -6.0f,  -14.0f, 1.0f, 3.6f,  5.8f },
+    };
+    const int swCount = (int)(sizeof(swPositions) / sizeof(swPositions[0]));
+    
+    glm::vec3 swMn, swMx;
+    modelAABB(seaweedModel, swMn, swMx);
+    seaweedMinY = swMn.y;
+    seaweedMaxY = swMx.y;
+
+    for (int i = 0; i < swCount; ++i)
+    {
+        const auto& s = swPositions[i];
+        glm::mat4 M = placeProp(seaweedModel, glm::vec3(s.x, floorY, s.z), s.scale, s.yaw);
+        seaweedInstances.push_back({M, s.seed});
+    }
+    std::cout << "[SEAWEED] " << seaweedInstances.size() << " instancji wodorostow" << std::endl;
 
     // Diagnostyka: wypisz AABB kazdego modelu po PreTransformVertices (do strojenia skal).
     auto logAABB = [](const char* name, const MultiMeshModel& m) {
@@ -1759,6 +1948,8 @@ inline void init(GLFWwindow* window)
     logAABB("Guppy Fish.glb", guppyFish);
     logAABB("Shiny Fish.glb", shinyFish);
     logAABB("Porsche.glb", porscheModel);
+    logAABB("Pirate Ship.glb", pirateShipModel);
+    logAABB("Old Ship.glb", oldShipModel);
 
     // OLE-02: mapy PBR (piasek na dno, zardzewialy metal na kostke)
     {
