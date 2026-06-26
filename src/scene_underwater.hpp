@@ -35,6 +35,7 @@
 #include "AnimatedModel.h"        // NED nurek - animacja szkieletowa (GPU skinning)
 
 #include <vector>
+#include <random>
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -131,8 +132,8 @@ namespace {
     // Parametry post-processingu
     glm::vec3 ppTint         = glm::vec3(0.6f, 0.85f, 0.95f); // niebiesko-zielony tint
     float     ppTintStrength = 0.35f;
-    float     ppDepthFogDensity = 0.08f;
-    float     ppDepthFogStart   = 1.0f;
+    float     ppDepthFogDensity = 0.12f;
+    float     ppDepthFogStart   = 0.5f;
     glm::vec3 ppDepthFogColor   = glm::vec3(0.04f, 0.18f, 0.28f);
     float     ppChromaticStrength = 0.003f;
     float     ppVignetteStrength  = 0.4f;
@@ -200,7 +201,7 @@ namespace {
     Spline debugSpline;                 // sciezka A (ryby + podglad)
     GLuint splineVAO = 0, splineVBO = 0;
     int    splineVertexCount = 0;
-    bool   showSpline = true;
+    bool   showSpline = false;
 
     // --- Druga sciezka dla ryb (NED-04) --------------------------------------
     Spline fishSplineB;                 // sciezka B (druga grupa ryb)
@@ -248,7 +249,7 @@ namespace {
     // Kolorowe osie (T=czerwona, N=zielona, B=niebieska) w co ktorej ramce PTF.
     GLuint ptfAxesVAO = 0, ptfAxesVBO = 0;
     int    ptfAxesVertexCount = 0;
-    bool   showPTF = true;
+    bool   showPTF = false;
 
     // --- Pelnoekranowy efekt wody --------------------------------------------
     GLuint waterQuadVAO = 0, waterQuadVBO = 0;
@@ -276,7 +277,7 @@ namespace {
     glm::vec3 sunDir     = glm::normalize(glm::vec3(0.3f, 1.0f, 0.2f)); // light from above
     glm::vec3 sunColor   = glm::vec3(0.85f, 0.95f, 1.0f);
     glm::vec3 waterColor = glm::vec3(0.05f, 0.22f, 0.30f);
-    float     fogDensity = 0.035f;
+    float     fogDensity = 0.05f;
 
     // OLE-01: tweakable PBR test materials (ImGui)
     PBRMaterial sphereMaterial = { glm::vec3(0.9f, 0.5f, 0.4f), 0.0f, 0.35f };
@@ -319,16 +320,16 @@ namespace {
     // Bioluminescencja: 3 dryfujace swiatla punktowe
     bool showBioLights = true;
     glm::vec3 bioBasePos[3] = {
-        glm::vec3(-3.0f, 1.5f, 2.0f),
-        glm::vec3( 4.0f, 2.0f, -1.5f),
-        glm::vec3( 0.0f, 0.5f, -4.0f),
+        glm::vec3(-7.0f, 2.5f, 4.0f),
+        glm::vec3( 6.0f, 3.0f, -5.0f),
+        glm::vec3( 2.0f, 1.5f, 8.0f),
     };
     glm::vec3 bioColors[3] = {
         glm::vec3(0.2f, 0.5f, 1.0f),    // niebieski
         glm::vec3(0.1f, 0.9f, 0.4f),    // zielony
         glm::vec3(0.6f, 0.2f, 0.9f),    // fioletowy
     };
-    float bioIntensity = 3.0f;
+    float bioIntensity = 15.0f;
     float bioPulseSpeed = 1.5f;
 
     // --- MRZ-05 (B13): latarka nurka -----------------------------------------
@@ -793,14 +794,17 @@ inline void drawJellyfish(Core::RenderContext& context, glm::mat4 modelMatrix,
 // NED-06: jedno zrodlo prawdy o rozmieszczeniu meduz - wspoldzielone przez
 // przebieg cieni i przebieg glowny. Bez tego cien meduzy odklejal sie od meduzy,
 // bo pozycje byly skopiowane w dwoch miejscach.
-static const int       NUM_JELLYFISH = 3;
+static const int       NUM_JELLYFISH = 6;
 static const glm::vec3 JELLY_BASE[NUM_JELLYFISH] = {
-    glm::vec3(-4.5f, 0.5f, -2.0f),
-    glm::vec3( 2.5f, 1.0f,  3.5f),
-    glm::vec3( 5.0f, 0.0f, -3.5f),
+    glm::vec3(-6.0f, 3.0f, -4.0f),
+    glm::vec3( 4.0f, 4.5f,  5.0f),
+    glm::vec3( 8.0f, 2.0f, -6.0f),
+    glm::vec3(-3.0f, 5.0f,  8.0f),
+    glm::vec3(12.0f, 3.5f,  1.0f),
+    glm::vec3(-8.0f, 4.0f,  3.0f),
 };
-static const float JELLY_PHASE[NUM_JELLYFISH] = { 0.0f, 2.1f, 4.0f };
-static const float JELLY_SCALE[NUM_JELLYFISH] = { 1.6f, 1.2f, 2.0f };
+static const float JELLY_PHASE[NUM_JELLYFISH] = { 0.0f, 2.1f, 4.0f, 1.3f, 3.5f, 5.2f };
+static const float JELLY_SCALE[NUM_JELLYFISH] = { 1.6f, 1.2f, 2.0f, 1.0f, 1.4f, 1.8f };
 
 // Macierz modelu meduzy i w danej chwili (pulsujace bujanie w pionie, czulki
 // nie wbijaja sie w dno). Identyczna w obu przebiegach renderowania.
@@ -984,18 +988,15 @@ inline void drawMultiMeshPBR(MultiMeshModel& model, glm::mat4 modelMatrix,
 {
     for (auto& ctx : model)
     {
-        if (ctx.albedoTex)
+        PBRMaterial m = material;
+        // Jeśli przekazany materiał narzuca własną teksturę albedo (jak rdza), zostawiamy ją.
+        // W przeciwnym razie, jeśli pod-mesh ma teksturę wgraną z pliku GLB, używamy jej.
+        if (!m.tex.useAlbedoMap && ctx.albedoTex)
         {
-            // Sub-mesh ma wlasna teksture base-color z GLB -> uzyj jej zamiast plaskiego koloru.
-            PBRMaterial m = material;
             m.tex.albedoMap = ctx.albedoTex;
             m.tex.useAlbedoMap = true;
-            drawPBRObject(ctx, modelMatrix, m, lightSpaceMat);
         }
-        else
-        {
-            drawPBRObject(ctx, modelMatrix, material, lightSpaceMat);
-        }
+        drawPBRObject(ctx, modelMatrix, m, lightSpaceMat);
     }
 }
 
@@ -1063,11 +1064,7 @@ inline void renderScene(GLFWwindow* window)
     }
 
     // Precompute model matrices (uzywane zarowno w shadow pass jak i main pass)
-    glm::mat4 groundModel = glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(40.0f, 0.2f, 40.0f));
-    glm::mat4 sphereModel = glm::translate(glm::vec3(-1.5f, 1.0f + 0.15f * std::sin(time), 0.0f)) * glm::scale(glm::vec3(1.0f));
-    const float metalCubeScale = 0.1f;
-    glm::mat4 cubeModel = glm::translate(glm::vec3(2.0f, 1.0f + 0.1f * std::sin(time * 0.7f), 0.0f)) *
-        glm::rotate((float)time * 0.4f, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(metalCubeScale));
+    glm::mat4 groundModel = glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)) * glm::scale(glm::vec3(20.0f, 0.2f, 20.0f));
 
     // OLE-04: macierz lightSpace (ortho + view z perspektywy swiatla)
     glm::mat4 lightSpaceMat = computeLightSpaceMatrix();
@@ -1089,8 +1086,6 @@ inline void renderScene(GLFWwindow* window)
 
         // Rysujemy cala geometrie sceny (te same obiekty co w main pass)
         drawShadowDepth(groundContext, groundModel, lightSpaceMat);
-        drawShadowDepth(sphereContext, sphereModel, lightSpaceMat);
-        drawShadowDepth(cubeContext, cubeModel, lightSpaceMat);
 
         // Ryby i meduzy tez rzucaja cienie (uzywa shadow_depth.vert z ich pozycjami)
         if (showFish)
@@ -1155,12 +1150,6 @@ inline void renderScene(GLFWwindow* window)
     // Sandy seabed (flat scaled cube, matte dielectric)
     drawPBRObject(groundContext, groundModel, groundMaterial, lightSpaceMat);
 
-    // Dielectric test sphere
-    drawPBRObject(sphereContext, sphereModel, sphereMaterial, lightSpaceMat);
-
-    // Metallic test cube
-    drawPBRObject(cubeContext, cubeModel, metalMaterial, lightSpaceMat);
-
     // --- Ryby (NED-03, A10) ---
     if (showFish)
     {
@@ -1200,11 +1189,17 @@ inline void renderScene(GLFWwindow* window)
                           time, JELLY_PHASE[i], lightSpaceMat);
     }
 
-    // --- Dekoracje Sketchfab (korale, Porsche) ---
+    // --- Dekoracje Sketchfab (korale, Porsche, Statki) ---
     if (showProps)
     {
         for (auto& prop : sceneProps)
+        {
+            // Aby zmiany suwaków ImGui dla rdzy działały na żywo:
+            if (prop.model == &oldShipModel)
+                prop.material = metalMaterial;
+
             drawMultiMeshPBR(*prop.model, prop.transform, prop.material, lightSpaceMat);
+        }
     }
 
     // --- Wodorosty (animacja falowania) ---
@@ -1727,8 +1722,8 @@ inline void processInput(GLFWwindow* window)
 
 
 
-        // Nie pozwol kamerze wplynac pod piasek
-        const float minCameraY = 0.4f;
+        // Nie pozwol kamerze wplynac pod piasek (zwiekszony margines dla calego modelu nurka)
+        const float minCameraY = 2.5f;
         if (camera.position.y < minCameraY)
             camera.position.y = minCameraY;
     }
@@ -1857,24 +1852,76 @@ inline void init(GLFWwindow* window)
     const float floorY = 0.0f;
     sceneProps.clear();
 
-    // === KORALOWCE (gesty rif) === targetSize = najwiekszy wymiar w jedn. swiata
-    sceneProps.push_back({&coralModel1, placeProp(coralModel1, glm::vec3(-8.0f, floorY, -5.0f), 3.4f, 0.0f), {glm::vec3(0.85f,0.35f,0.30f), 0.0f, 0.7f}});
-    sceneProps.push_back({&coralModel1, placeProp(coralModel1, glm::vec3( 3.0f, floorY, -3.0f), 3.0f, 0.8f), {glm::vec3(0.75f,0.25f,0.20f), 0.0f, 0.7f}});
-    sceneProps.push_back({&coralModel1, placeProp(coralModel1, glm::vec3(12.0f, floorY,  5.0f), 4.2f, 2.2f), {glm::vec3(0.80f,0.40f,0.55f), 0.0f, 0.7f}});
-    sceneProps.push_back({&coralModel2, placeProp(coralModel2, glm::vec3( 5.0f, floorY,  8.0f), 4.0f, 0.0f), {glm::vec3(0.90f,0.55f,0.40f), 0.0f, 0.6f}});
-    sceneProps.push_back({&coralModel2, placeProp(coralModel2, glm::vec3(-4.0f, floorY, -9.0f), 3.2f, 1.5f), {glm::vec3(0.95f,0.40f,0.30f), 0.0f, 0.55f}});
-    sceneProps.push_back({&coralPiece,  placeProp(coralPiece,  glm::vec3(-3.0f, floorY,  7.0f), 2.6f, 0.0f), {glm::vec3(0.70f,0.30f,0.50f), 0.0f, 0.65f}});
-    sceneProps.push_back({&coralPiece,  placeProp(coralPiece,  glm::vec3(-6.0f, floorY, 10.0f), 2.2f, 2.4f), {glm::vec3(0.65f,0.50f,0.70f), 0.0f, 0.6f}});
-    sceneProps.push_back({&coralPiece,  placeProp(coralPiece,  glm::vec3( 9.0f, floorY, -6.0f), 3.0f, 0.5f), {glm::vec3(0.80f,0.35f,0.45f), 0.0f, 0.7f}});
-    sceneProps.push_back({&crescentCoral, placeProp(crescentCoral, glm::vec3(10.0f, floorY, -3.0f), 4.2f, 0.0f), {glm::vec3(0.95f,0.80f,0.30f), 0.0f, 0.55f}});
-    sceneProps.push_back({&crescentCoral, placeProp(crescentCoral, glm::vec3(-10.0f,floorY,  4.0f), 3.6f, 3.0f), {glm::vec3(0.90f,0.70f,0.25f), 0.0f, 0.5f}});
-    sceneProps.push_back({&coralFish,   placeProp(coralFish,   glm::vec3( 7.0f, floorY, -8.0f), 3.4f, 0.0f), {glm::vec3(0.90f,0.45f,0.25f), 0.0f, 0.5f}});
-
-    // === PORSCHE 911 zatopione === targetSize = dlugosc auta w jedn. swiata.
-    // Najpierw sadzimy auto na dnie (placeProp), potem przechylamy je na bok o -8st
-    // WOKOL punktu kontaktu z piaskiem - jeden bok lekko wbity w dno, jak wrak.
+    // OLE-02: mapy PBR (piasek na dno, zardzewialy metal na stary statek)
     {
-        glm::vec3 porschePos(15.0f, floorY, -10.0f);
+        PBRTextureSet sandTex, rustTex;
+        loadPBRTextureSet("./textures/pbr/sand", "sand", sandTex);
+        loadPBRTextureSet("./textures/pbr/rusty_metal", "rusty_metal", rustTex);
+
+        groundMaterial.tex = sandTex;
+        groundMaterial.uvScale = glm::vec2(16.0f); // powtarzanie UV na duzej plaszczyznie
+
+        metalMaterial.tex = rustTex;
+        metalMaterial.metallic  = 1.0f;  // fallback gdy mapy wylaczone
+        metalMaterial.roughness = 0.35f;
+    }
+
+    // === KORALOWCE (Generacja Proceduralna) ===
+    std::mt19937 gen(1337); // staly seed dla powtarzalnego ukladu
+    std::uniform_real_distribution<float> posDist(-60.0f, 60.0f);
+    std::uniform_real_distribution<float> yawDist(0.0f, glm::two_pi<float>());
+    
+    // Zdefiniowane kluczowe pozycje do omijania
+    glm::vec3 pirateShipPos(-40.0f, floorY, 0.0f);
+    glm::vec3 oldShipPos(40.0f, floorY, 0.0f);
+    glm::vec3 diverSpawnPos(0.0f, floorY, 0.0f);
+
+    auto isValidPos = [&](glm::vec3 p) {
+        if (glm::length(p - diverSpawnPos) < 8.0f) return false; // miejsce spawnu
+        if (glm::length(p - pirateShipPos) < 14.0f) return false; // wrak 1
+        if (glm::length(p - oldShipPos) < 12.0f) return false; // wrak 2
+        return true;
+    };
+
+    struct CoralType {
+        MultiMeshModel* model;
+        float minSize, maxSize;
+        glm::vec3 color;
+        float metallic, roughness;
+    };
+    
+    std::vector<CoralType> coralTypes = {
+        {&coralModel1,   2.5f, 4.2f, glm::vec3(0.85f,0.35f,0.30f), 0.0f, 0.70f},
+        {&coralModel2,   2.8f, 4.5f, glm::vec3(0.90f,0.55f,0.40f), 0.0f, 0.60f},
+        {&coralPiece,    1.8f, 3.5f, glm::vec3(0.70f,0.30f,0.50f), 0.0f, 0.65f},
+        {&crescentCoral, 2.6f, 4.5f, glm::vec3(0.95f,0.80f,0.30f), 0.0f, 0.55f},
+        {&coralFish,     2.6f, 4.0f, glm::vec3(0.90f,0.45f,0.25f), 0.0f, 0.50f}
+    };
+    
+    std::uniform_int_distribution<int> typeDist(0, coralTypes.size() - 1);
+    std::uniform_real_distribution<float> randFloat(0.0f, 1.0f);
+
+    // Generujemy 150 koralowcow (mniej ze wzgledu na wydajnosc)
+    int coralsSpawned = 0;
+    while (coralsSpawned < 150) {
+        glm::vec3 pos(posDist(gen), floorY, posDist(gen));
+        if (!isValidPos(pos)) continue;
+        
+        const auto& ctype = coralTypes[typeDist(gen)];
+        float scale = ctype.minSize + randFloat(gen) * (ctype.maxSize - ctype.minSize);
+        float yaw = yawDist(gen);
+        
+        // Lekka wariacja koloru dla roznorodnosci
+        glm::vec3 color = ctype.color * (0.8f + 0.4f * randFloat(gen)); 
+        color = glm::clamp(color, 0.0f, 1.0f);
+        
+        sceneProps.push_back({ctype.model, placeProp(*ctype.model, pos, scale, yaw), {color, ctype.metallic, ctype.roughness}});
+        coralsSpawned++;
+    }
+
+    // === PORSCHE 911 zatopione (Easter Egg na skraju mapy) ===
+    {
+        glm::vec3 porschePos(48.0f, floorY, 48.0f);
         glm::mat4 porscheM = glm::translate(porschePos)
             * glm::rotate(glm::radians(-8.0f), glm::vec3(0,0,1))
             * glm::translate(-porschePos)
@@ -1884,86 +1931,47 @@ inline void init(GLFWwindow* window)
     }
 
     // === STATEK PIRACKI (zatopiony wrak) ===
-    // Umieszczony na (-50, floor, 35) - daleko od korali i Porsche.
-    // Lekko przechylony na bok (-10 st) i osadzony na dnie jak wrak.
-    // targetSize = 80 (duzy statek piracki, widoczny z daleka)
     {
-        glm::vec3 shipPos(-50.0f, floorY, 35.0f);
-        glm::mat4 shipM = glm::translate(shipPos)
+        glm::mat4 shipM = glm::translate(pirateShipPos)
             * glm::rotate(glm::radians(-10.0f), glm::vec3(0,0,1))  // przechyl na bok
-            * glm::translate(-shipPos)
-            * placeProp(pirateShipModel, shipPos, 80.0f, glm::radians(25.0f));
+            * glm::translate(-pirateShipPos)
+            * placeProp(pirateShipModel, pirateShipPos, 80.0f, glm::radians(25.0f));
         sceneProps.push_back({&pirateShipModel, shipM,
             {glm::vec3(0.55f, 0.35f, 0.20f), 0.1f, 0.75f}});  // drewniany, matowy
     }
 
-    // === OLD SHIP (stary statek, blizej niz pirate ship, po drugiej stronie) ===
+    // === OLD SHIP (stary statek, zardzewialy metal) ===
     {
-        glm::vec3 oldShipPos(30.0f, floorY, -25.0f);
         glm::mat4 oldShipM = glm::translate(oldShipPos)
             * glm::rotate(glm::radians(6.0f), glm::vec3(0,0,1))   // lekki przechyl
             * glm::translate(-oldShipPos)
             * placeProp(oldShipModel, oldShipPos, 60.0f, glm::radians(-35.0f));
-        sceneProps.push_back({&oldShipModel, oldShipM,
-            {glm::vec3(0.45f, 0.30f, 0.18f), 0.15f, 0.80f}});  // stare drewno
+        sceneProps.push_back({&oldShipModel, oldShipM, metalMaterial});  // tekstury rdzy nakladane na statek
     }
     std::cout << "[PROPS] Zaladowano " << sceneProps.size() << " dekoracji (floorY=0)" << std::endl;
 
-    // --- Wodorosty: scatter instancji wokol mapy ---
-    // Pozycje omijaja duze modele (statki, auta). Skala zmniejszona ~3x (od 0.3 do 1.5).
+    // --- Wodorosty: proceduralny scatter wokol mapy ---
     seaweedInstances.clear();
-    struct SwPos { float x, z, scale, yaw, seed; };
-    const SwPos swPositions[] = {
-        // --- Centrum / okolice korali (omijajac Porsche przy 15, -10) ---
-        { -7.0f,  -4.0f, 0.8f, 0.2f,  0.0f },
-        { -5.5f,   2.0f, 0.6f, 1.1f,  1.3f },
-        {  4.5f,  -2.5f, 1.1f, 0.7f,  2.7f },
-        {  2.0f,   5.0f, 0.5f, 2.3f,  0.9f },
-        { -1.0f,  -6.0f, 0.7f, 3.0f,  4.1f },
-        {  8.0f,   3.0f, 0.9f, 0.4f,  1.8f },
-        { -9.0f,   6.0f, 1.2f, 1.7f,  3.3f },
-        {  6.0f,  -7.0f, 0.4f, 0.9f,  5.0f },
-        { -3.0f,   9.0f, 0.7f, 2.6f,  0.4f },
-        { -11.0f, -2.0f, 0.6f, 0.6f,  3.7f },
-        {  0.0f,  11.0f, 0.9f, 3.5f,  1.1f },
-        {  9.0f,   8.0f, 0.5f, 2.0f,  4.4f },
-        
-        // --- Droga w lewo-gore (-X, +Z) daleko od Pirate Ship (-50, 35) ---
-        {-14.0f,   2.0f, 1.4f, 0.3f,  2.5f },
-        {-20.0f,   8.0f, 1.2f, 1.9f,  0.7f },
-        {-26.0f,  12.0f, 1.0f, 0.8f,  3.9f },
-        {-17.0f,  15.0f, 0.6f, 0.5f,  4.8f },
-        {-10.0f,  20.0f, 0.8f, 1.6f,  1.0f },
-
-        // --- Droga na prawo-dol (+X, -Z) z dala od Old Ship (30, -25) ---
-        { 18.0f, -20.0f, 0.7f, 2.1f,  0.6f },
-        {  8.0f, -18.0f, 0.6f, 3.3f,  0.8f },
-        
-        // --- Peryferia mapy (gestsze zarosla, ale na uboczu) ---
-        {-15.0f, -12.0f, 1.5f, 1.3f,  3.6f },
-        { 13.0f,  14.0f, 1.3f, 0.7f,  0.3f },
-        { -8.0f,  16.0f, 0.8f, 2.9f,  5.1f },
-        { 18.0f,  10.0f, 0.6f, 1.6f,  2.6f },
-        {-18.0f,  -8.0f, 1.1f, 0.1f,  4.3f },
-        {  5.0f,  18.0f, 0.9f, 2.2f,  1.9f },
-        {-12.0f,  -17.0f, 1.2f, 3.4f,  0.5f },
-        { 22.0f,   5.0f, 0.4f, 1.1f,  3.8f },
-        { -4.0f, -18.0f, 1.3f, 2.0f,  2.4f },
-        { 10.0f,  16.0f, 0.7f, 0.8f,  1.7f },
-        { -6.0f,  -14.0f, 1.0f, 3.6f,  5.8f },
-    };
-    const int swCount = (int)(sizeof(swPositions) / sizeof(swPositions[0]));
-    
     glm::vec3 swMn, swMx;
     modelAABB(seaweedModel, swMn, swMx);
     seaweedMinY = swMn.y;
     seaweedMaxY = swMx.y;
 
-    for (int i = 0; i < swCount; ++i)
-    {
-        const auto& s = swPositions[i];
-        glm::mat4 M = placeProp(seaweedModel, glm::vec3(s.x, floorY, s.z), s.scale, s.yaw);
-        seaweedInstances.push_back({M, s.seed});
+    std::uniform_real_distribution<float> swScaleDist(0.5f, 1.8f);
+    std::uniform_real_distribution<float> seedDist(0.0f, 10.0f);
+
+    int swSpawned = 0;
+    while (swSpawned < 200) {
+        glm::vec3 pos(posDist(gen), floorY, posDist(gen));
+        if (!isValidPos(pos)) continue;
+        
+        float scale = swScaleDist(gen);
+        float yaw = yawDist(gen);
+        float seed = seedDist(gen);
+        
+        glm::mat4 M = placeProp(seaweedModel, pos, scale, yaw);
+        seaweedInstances.push_back({M, seed});
+        swSpawned++;
     }
     std::cout << "[SEAWEED] " << seaweedInstances.size() << " instancji wodorostow" << std::endl;
 
@@ -1984,20 +1992,6 @@ inline void init(GLFWwindow* window)
     logAABB("Porsche.glb", porscheModel);
     logAABB("Pirate Ship.glb", pirateShipModel);
     logAABB("Old Ship.glb", oldShipModel);
-
-    // OLE-02: mapy PBR (piasek na dno, zardzewialy metal na kostke)
-    {
-        PBRTextureSet sandTex, rustTex;
-        loadPBRTextureSet("./textures/pbr/sand", "sand", sandTex);
-        loadPBRTextureSet("./textures/pbr/rusty_metal", "rusty_metal", rustTex);
-
-        groundMaterial.tex = sandTex;
-        groundMaterial.uvScale = glm::vec2(16.0f); // powtarzanie UV na duzej plaszczyznie
-
-        metalMaterial.tex = rustTex;
-        metalMaterial.metallic  = 1.0f;  // fallback gdy mapy wylaczone
-        metalMaterial.roughness = 0.35f;
-    }
 
     // Skybox VAO
     glGenVertexArrays(1, &skyboxVAO);
@@ -2032,12 +2026,14 @@ inline void init(GLFWwindow* window)
     skyboxCubemap = Core::LoadCubemap(faces);
 
     // --- Splajn (NED-01): zapetlona sciezka testowa nad dnem ----------------
-    debugSpline.addControlPoint(glm::vec3( 6.0f, 1.0f,  0.0f));
-    debugSpline.addControlPoint(glm::vec3( 3.0f, 2.5f,  5.0f));
-    debugSpline.addControlPoint(glm::vec3(-3.0f, 3.0f,  4.0f));
-    debugSpline.addControlPoint(glm::vec3(-6.0f, 1.0f, -1.0f));
-    debugSpline.addControlPoint(glm::vec3(-2.0f, 0.0f, -5.0f));
-    debugSpline.addControlPoint(glm::vec3( 4.0f, 2.0f, -4.0f));
+    debugSpline.addControlPoint(glm::vec3( 30.0f, 3.0f,  15.0f));
+    debugSpline.addControlPoint(glm::vec3( 10.0f, 5.0f,  25.0f));
+    debugSpline.addControlPoint(glm::vec3(-10.0f, 4.0f,  25.0f));
+    debugSpline.addControlPoint(glm::vec3(-30.0f, 2.0f,  15.0f));
+    debugSpline.addControlPoint(glm::vec3(-30.0f, 1.5f, -15.0f));
+    debugSpline.addControlPoint(glm::vec3(-10.0f, 4.0f, -25.0f));
+    debugSpline.addControlPoint(glm::vec3( 10.0f, 2.5f, -25.0f));
+    debugSpline.addControlPoint(glm::vec3( 30.0f, 4.0f, -15.0f));
 
     std::vector<glm::vec3> splinePts = debugSpline.sampleLine(32);
     splineVertexCount = (int)splinePts.size();
@@ -2100,12 +2096,14 @@ inline void init(GLFWwindow* window)
     std::cout << "[NED-02] frame(0.5): dot(T,N)=" << glm::dot(fh.T, fh.N) << "\n";
 
     // --- NED-04: druga sciezka dla ryb + ramki PTF --------------------------
-    fishSplineB.addControlPoint(glm::vec3(-7.0f, 0.5f,  3.0f));
-    fishSplineB.addControlPoint(glm::vec3(-2.0f, 1.0f,  7.0f));
-    fishSplineB.addControlPoint(glm::vec3( 5.0f, 1.5f,  6.0f));
-    fishSplineB.addControlPoint(glm::vec3( 7.0f, 0.8f, -2.0f));
-    fishSplineB.addControlPoint(glm::vec3( 1.0f, 2.0f, -6.0f));
-    fishSplineB.addControlPoint(glm::vec3(-5.0f, 1.2f, -4.0f));
+    fishSplineB.addControlPoint(glm::vec3(  0.0f, 5.0f,  10.0f));
+    fishSplineB.addControlPoint(glm::vec3(-20.0f, 2.0f,  20.0f));
+    fishSplineB.addControlPoint(glm::vec3(-25.0f, 6.0f,   0.0f));
+    fishSplineB.addControlPoint(glm::vec3(-20.0f, 3.0f, -20.0f));
+    fishSplineB.addControlPoint(glm::vec3(  0.0f, 4.0f, -10.0f));
+    fishSplineB.addControlPoint(glm::vec3( 20.0f, 2.0f, -20.0f));
+    fishSplineB.addControlPoint(glm::vec3( 25.0f, 6.0f,   0.0f));
+    fishSplineB.addControlPoint(glm::vec3( 20.0f, 3.0f,  20.0f));
     fishSplineB.buildFrames(128);
 
     std::vector<glm::vec3> splineBPts = fishSplineB.sampleLine(32);
@@ -2133,12 +2131,12 @@ inline void init(GLFWwindow* window)
     std::cout << "[NED-04] ryb na splajnach: " << fishes.size() << " (2 sciezki)\n";
 
     // --- Trzecia sciezka (Sketchfab fish) ---
-    fishSplineC.addControlPoint(glm::vec3(-4.0f, 1.5f,  5.0f));
-    fishSplineC.addControlPoint(glm::vec3( 3.0f, 2.5f,  8.0f));
-    fishSplineC.addControlPoint(glm::vec3( 8.0f, 1.0f,  2.0f));
-    fishSplineC.addControlPoint(glm::vec3( 4.0f, 3.0f, -5.0f));
-    fishSplineC.addControlPoint(glm::vec3(-3.0f, 2.0f, -7.0f));
-    fishSplineC.addControlPoint(glm::vec3(-8.0f, 1.5f, -2.0f));
+    fishSplineC.addControlPoint(glm::vec3(-45.0f, 3.0f, -30.0f));
+    fishSplineC.addControlPoint(glm::vec3(  0.0f, 6.0f, -35.0f));
+    fishSplineC.addControlPoint(glm::vec3( 45.0f, 2.0f, -30.0f));
+    fishSplineC.addControlPoint(glm::vec3( 45.0f, 5.0f,  30.0f));
+    fishSplineC.addControlPoint(glm::vec3(  0.0f, 3.0f,  35.0f));
+    fishSplineC.addControlPoint(glm::vec3(-45.0f, 4.0f,  30.0f));
     fishSplineC.buildFrames(128);
 
     // --- Ryby Sketchfab na splajnach ---
@@ -2294,123 +2292,139 @@ inline void renderLoop(GLFWwindow* window)
         if (showPanel) {
         ImGui::Begin("Scene Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("WSAD ruch, Q/E przechyl, Spacja/Ctrl gora-dol");
-        ImGui::Text("Suwaki: najedz myszka na panel (Caps Lock = lock kamery)");
-        if (ImGui::GetIO().WantCaptureMouse)
-            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "Panel aktywny - suwaki dzialaja");
-        ImGui::Separator();
+        ImGui::TextDisabled("WSAD ruch | Q/E przechyl | Spacja/Ctrl gora-dol | H ukryj panel");
         ImGui::Text("Kamera: %6.1f %6.1f %6.1f", camera.position.x, camera.position.y, camera.position.z);
         ImGui::PushItemWidth(160.0f);
-        ImGui::SliderFloat("Czulosc myszy", &mouseSensitivity, 0.02f, 0.4f);
         ImGui::Separator();
-        ImGui::Checkbox("Pokaz splajn (NED-01)", &showSpline);
-        ImGui::Checkbox("Pokaz ramki PTF (NED-02)", &showPTF);
-        ImGui::Separator();
-        ImGui::Text("NED-03 Ryby (A10)");
-        ImGui::Checkbox("Pokaz ryby", &showFish);
-        ImGui::SliderFloat("Wave amplitude", &fishParams.waveAmplitude, 0.0f, 1.0f);
-        ImGui::SliderFloat("Wave frequency", &fishParams.waveFrequency, 0.5f, 15.0f);
-        ImGui::SliderFloat("Wave speed",     &fishParams.waveSpeed,     0.0f, 15.0f);
-        ImGui::SliderFloat("Fin amplitude",  &fishParams.finAmplitude,  0.0f, 0.5f);
-        ImGui::TextDisabled("Lewy klik = strasz ryby w poblizu");
-        ImGui::SliderFloat("Strach: promien", &scareRadius, 1.0f, 20.0f);
-        ImGui::SliderFloat("Strach: mnoznik", &scareSpeedMult, 1.0f, 10.0f);
-        ImGui::Separator();
-        ImGui::Text("NED-06 Meduzy");
-        ImGui::Checkbox("Pokaz meduzy", &showJelly);
-        ImGui::SliderFloat("Puls amplituda", &jellyParams.pulseAmplitude,    0.0f, 0.5f);
-        ImGui::SliderFloat("Puls predkosc",  &jellyParams.pulseSpeed,        0.0f, 6.0f);
-        ImGui::SliderFloat("Czulki amplit.", &jellyParams.tentacleAmplitude, 0.0f, 0.3f);
-        ImGui::SliderFloat("Bob pionowy",    &jellyParams.bobAmplitude,      0.0f, 0.6f);
-        ImGui::Separator();
-        ImGui::Checkbox("Efekt wody (overlay)", &showWaterOverlay);
-        ImGui::SliderFloat("Sila efektu wody", &waterOverlayStrength, 0.0f, 1.0f);
-        ImGui::Separator();
-        ImGui::Text("Dekoracje Sketchfab");
-        ImGui::Checkbox("Pokaz dekoracje (korale/ryby/Porsche)", &showProps);
-        ImGui::Text("Props: %d", (int)sceneProps.size());
-        ImGui::Separator();
-        ImGui::Text("NUREK (animacja szkieletowa)");
-        if (diver.valid())
-        {
-            ImGui::Checkbox("Pokaz nurka", &showDiver);
-            ImGui::Text("Meshy: %d  Kosci: %d  Klipy: %d",
-                        (int)diver.meshes().size(), diver.numBones(), diver.numClips());
-            ImGui::SliderInt("Klip animacji", &diverClip, 0, glm::max(0, diver.numClips() - 1));
-            ImGui::SliderFloat("Tempo animacji", &diverAnimSpeed, 0.0f, 3.0f);
-            ImGui::SliderFloat3("Pozycja nurka", (float*)&diverPos, -20.0f, 20.0f);
-            ImGui::SliderFloat3("Obrot (pitch/yaw/roll)", (float*)&diverRotDeg, -180.0f, 180.0f);
-            ImGui::SliderFloat("Skala x", &diverScaleMul, 0.1f, 4.0f);
-        }
-        else ImGui::TextDisabled("(nie zaladowano models/scene.gltf)");
-        ImGui::Separator();
-        ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
-        ImGui::ColorEdit3("Water color", (float*)&waterColor);
-        ImGui::ColorEdit3("Sun color",   (float*)&sunColor);
-        ImGui::SliderFloat3("Sun dir",   (float*)&sunDir, -1.0f, 1.0f);
-        ImGui::Separator();
-        ImGui::Text("OLE-04 Shadow mapping (M4)");
-        ImGui::Checkbox("Cienie wlaczone", &useShadows);
-        ImGui::SliderFloat("Shadow ortho size", &shadowOrthoSize, 5.0f, 60.0f);
-        ImGui::SliderFloat("Bias min", &shadowBiasMin, 0.0f, 0.01f, "%.4f");
-        ImGui::SliderFloat("Bias max", &shadowBiasMax, 0.0f, 0.1f, "%.3f");
-        ImGui::Checkbox("PCF 5x5 (mieksze krawedzie)", &usePCF5x5);
-        ImGui::Separator();
-        ImGui::Text("OLE-01 PBR (kula - uniformy)");
-        ImGui::ColorEdit3("Albedo", (float*)&sphereMaterial.albedo);
-        ImGui::SliderFloat("Metallic",  &sphereMaterial.metallic,  0.0f, 1.0f);
-        ImGui::SliderFloat("Roughness", &sphereMaterial.roughness, 0.0f, 1.0f);
-        ImGui::Separator();
-        ImGui::Text("OLE-02 PBR tekstury");
-        if (ImGui::Checkbox("Mapy piasku (dno)", &groundUseTextures))
-            setTextureFlags(groundMaterial.tex, groundUseTextures);
-        if (ImGui::Checkbox("Mapy zardzewialego metalu (kostka)", &metalUseTextures))
-            setTextureFlags(metalMaterial.tex, metalUseTextures);
-        ImGui::SliderFloat("Metal roughness (fallback)", &metalMaterial.roughness, 0.0f, 1.0f);
-        ImGui::TextDisabled("Kula i ryby: tylko uniformy");
-        ImGui::Separator();
-        ImGui::Text("OLE-03 Normal mapping (M1)");
-        if (ImGui::Checkbox("Normal map: piasek (dno)", &groundUseNormalMap))
-        {
-            if (groundMaterial.tex.normalMap)
-                groundMaterial.tex.useNormalMap = groundUseNormalMap;
-        }
-        if (ImGui::Checkbox("Normal map: metal (kostka)", &metalUseNormalMap))
-        {
-            if (metalMaterial.tex.normalMap)
-                metalMaterial.tex.useNormalMap = metalUseNormalMap;
-        }
-        ImGui::TextDisabled("Wlacz/wylacz aby porownac plaski vs wyboje");
-        ImGui::Separator();
-        ImGui::Text("MRZ-05 Latarka nurka (B13)");
+
+        // === LATARKA (B13 - ruchome swiatla) ===
+        ImGui::Text("Latarka nurka (B13)");
         ImGui::Checkbox("Latarka [F]", &headlampOn);
         if (ImGui::Button("Kolor [C]")) headlampColorIdx = (headlampColorIdx + 1) % 3;
         ImGui::SameLine();
         ImGui::Text("%s", headlampColorNames[headlampColorIdx]);
         ImGui::SliderFloat("Jasnosc [+/- / scroll]", &headlampIntensity, 0.0f, 30.0f);
         ImGui::Separator();
-        ImGui::Text("OLE-05 Wiele swiatel");
-        ImGui::Checkbox("Bioluminescencja [B] (3 point lights)", &showBioLights);
+
+        // === BIOLUMINESCENCJA (wiele swiatel) ===
+        ImGui::Checkbox("Bioluminescencja [B]", &showBioLights);
         ImGui::SliderFloat("Bio intensywnosc", &bioIntensity, 0.0f, 10.0f);
-        ImGui::SliderFloat("Bio pulsowanie", &bioPulseSpeed, 0.0f, 5.0f);
-        ImGui::ColorEdit3("Bio 1 (niebieski)", (float*)&bioColors[0]);
-        ImGui::ColorEdit3("Bio 2 (zielony)",   (float*)&bioColors[1]);
-        ImGui::ColorEdit3("Bio 3 (fioletowy)", (float*)&bioColors[2]);
         ImGui::Text("Aktywne: %d point, %d spot", numPointLights, numSpotLights);
         ImGui::Separator();
-        ImGui::Text("MRZ-07 Babelki");
-        ImGui::Checkbox("Babelki", &showBubbles);
-        ImGui::ColorEdit3("Kolor babelkow", (float*)&bubbleColor);
+
+        // === MGLA / ATMOSFERA ===
+        ImGui::SliderFloat("Fog density", &fogDensity, 0.0f, 0.15f);
+        ImGui::ColorEdit3("Water color", (float*)&waterColor);
         ImGui::Separator();
-        ImGui::Text("OLE-07 Post-processing podwodny");
-        ImGui::Checkbox("Post-processing wlaczony", &usePostprocess);
-        ImGui::ColorEdit3("Tint podwodny", (float*)&ppTint);
-        ImGui::SliderFloat("Sila tintu", &ppTintStrength, 0.0f, 1.0f);
-        ImGui::SliderFloat("Mgla glebi - gestosc", &ppDepthFogDensity, 0.0f, 0.5f);
-        ImGui::SliderFloat("Mgla glebi - start", &ppDepthFogStart, 0.0f, 20.0f);
-        ImGui::ColorEdit3("Kolor mgly glebi", (float*)&ppDepthFogColor);
-        ImGui::SliderFloat("Aberracja chromatyczna", &ppChromaticStrength, 0.0f, 0.02f, "%.4f");
-        ImGui::SliderFloat("Vignette", &ppVignetteStrength, 0.0f, 1.5f);
+
+        // === SPLAJNY / PTF (toggle do demonstracji metody) ===
+        ImGui::Checkbox("Pokaz splajn (NED-01)", &showSpline);
+        ImGui::Checkbox("Pokaz ramki PTF (NED-02)", &showPTF);
+        ImGui::Separator();
+
+        // === PBR MATERIALY ===
+        ImGui::Text("PBR (kula - uniformy)");
+        ImGui::ColorEdit3("Albedo", (float*)&sphereMaterial.albedo);
+        ImGui::SliderFloat("Metallic",  &sphereMaterial.metallic,  0.0f, 1.0f);
+        ImGui::SliderFloat("Roughness", &sphereMaterial.roughness, 0.0f, 1.0f);
+        if (ImGui::Checkbox("Mapy piasku (dno)", &groundUseTextures))
+            setTextureFlags(groundMaterial.tex, groundUseTextures);
+        if (ImGui::Checkbox("Mapy metalu (kostka)", &metalUseTextures))
+            setTextureFlags(metalMaterial.tex, metalUseTextures);
+        // Normal mapping toggles
+        if (ImGui::Checkbox("Normal map: piasek", &groundUseNormalMap))
+        {
+            if (groundMaterial.tex.normalMap)
+                groundMaterial.tex.useNormalMap = groundUseNormalMap;
+        }
+        if (ImGui::Checkbox("Normal map: metal", &metalUseNormalMap))
+        {
+            if (metalMaterial.tex.normalMap)
+                metalMaterial.tex.useNormalMap = metalUseNormalMap;
+        }
+        ImGui::Separator();
+
+        // === SCENA (toggle widocznosci) ===
+        ImGui::Checkbox("Pokaz ryby", &showFish);
+        ImGui::Checkbox("Pokaz meduzy", &showJelly);
+        ImGui::Checkbox("Pokaz dekoracje", &showProps);
+        ImGui::Checkbox("Pokaz nurka", &showDiver);
+
+        // =====================================================================
+        // SEKCJE ZWIJANE (zaawansowane / debug)
+        // =====================================================================
+
+        if (ImGui::CollapsingHeader("Ryby (A10) - Zaawansowane"))
+        {
+            ImGui::SliderFloat("Wave amplitude", &fishParams.waveAmplitude, 0.0f, 1.0f);
+            ImGui::SliderFloat("Wave frequency", &fishParams.waveFrequency, 0.5f, 15.0f);
+            ImGui::SliderFloat("Wave speed",     &fishParams.waveSpeed,     0.0f, 15.0f);
+            ImGui::SliderFloat("Fin amplitude",  &fishParams.finAmplitude,  0.0f, 0.5f);
+            ImGui::TextDisabled("Lewy klik = strasz ryby w poblizu");
+            ImGui::SliderFloat("Strach: promien", &scareRadius, 1.0f, 20.0f);
+            ImGui::SliderFloat("Strach: mnoznik", &scareSpeedMult, 1.0f, 10.0f);
+        }
+
+        if (ImGui::CollapsingHeader("Meduzy - Zaawansowane"))
+        {
+            ImGui::SliderFloat("Puls amplituda", &jellyParams.pulseAmplitude,    0.0f, 0.5f);
+            ImGui::SliderFloat("Puls predkosc",  &jellyParams.pulseSpeed,        0.0f, 6.0f);
+            ImGui::SliderFloat("Czulki amplit.", &jellyParams.tentacleAmplitude, 0.0f, 0.3f);
+            ImGui::SliderFloat("Bob pionowy",    &jellyParams.bobAmplitude,      0.0f, 0.6f);
+        }
+
+        if (ImGui::CollapsingHeader("Nurek - Zaawansowane"))
+        {
+            if (diver.valid())
+            {
+                ImGui::Text("Meshy: %d  Kosci: %d  Klipy: %d",
+                            (int)diver.meshes().size(), diver.numBones(), diver.numClips());
+                ImGui::SliderInt("Klip animacji", &diverClip, 0, glm::max(0, diver.numClips() - 1));
+                ImGui::SliderFloat("Tempo animacji", &diverAnimSpeed, 0.0f, 3.0f);
+                ImGui::SliderFloat3("Pozycja nurka", (float*)&diverPos, -20.0f, 20.0f);
+                ImGui::SliderFloat3("Obrot (pitch/yaw/roll)", (float*)&diverRotDeg, -180.0f, 180.0f);
+                ImGui::SliderFloat("Skala x", &diverScaleMul, 0.1f, 4.0f);
+            }
+            else ImGui::TextDisabled("(nie zaladowano models/scene.gltf)");
+        }
+
+        if (ImGui::CollapsingHeader("Cienie - Debug"))
+        {
+            ImGui::Checkbox("Cienie wlaczone", &useShadows);
+            ImGui::SliderFloat("Shadow ortho size", &shadowOrthoSize, 5.0f, 60.0f);
+            ImGui::SliderFloat("Bias min", &shadowBiasMin, 0.0f, 0.01f, "%.4f");
+            ImGui::SliderFloat("Bias max", &shadowBiasMax, 0.0f, 0.1f, "%.3f");
+            ImGui::Checkbox("PCF 5x5 (mieksze krawedzie)", &usePCF5x5);
+        }
+
+        if (ImGui::CollapsingHeader("Post-processing - Debug"))
+        {
+            ImGui::Checkbox("Post-processing wlaczony", &usePostprocess);
+            ImGui::ColorEdit3("Tint podwodny", (float*)&ppTint);
+            ImGui::SliderFloat("Sila tintu", &ppTintStrength, 0.0f, 1.0f);
+            ImGui::SliderFloat("Mgla glebi - gestosc", &ppDepthFogDensity, 0.0f, 0.5f);
+            ImGui::SliderFloat("Mgla glebi - start", &ppDepthFogStart, 0.0f, 20.0f);
+            ImGui::ColorEdit3("Kolor mgly glebi", (float*)&ppDepthFogColor);
+            ImGui::SliderFloat("Aberracja chromatyczna", &ppChromaticStrength, 0.0f, 0.02f, "%.4f");
+            ImGui::SliderFloat("Vignette", &ppVignetteStrength, 0.0f, 1.5f);
+        }
+
+        if (ImGui::CollapsingHeader("Efekty - Debug"))
+        {
+            ImGui::Checkbox("Efekt wody (overlay)", &showWaterOverlay);
+            ImGui::SliderFloat("Sila efektu wody", &waterOverlayStrength, 0.0f, 1.0f);
+            ImGui::Checkbox("Babelki", &showBubbles);
+            ImGui::ColorEdit3("Kolor babelkow", (float*)&bubbleColor);
+            ImGui::SliderFloat("Bio pulsowanie", &bioPulseSpeed, 0.0f, 5.0f);
+            ImGui::ColorEdit3("Bio 1 (niebieski)", (float*)&bioColors[0]);
+            ImGui::ColorEdit3("Bio 2 (zielony)",   (float*)&bioColors[1]);
+            ImGui::ColorEdit3("Bio 3 (fioletowy)", (float*)&bioColors[2]);
+            ImGui::ColorEdit3("Sun color",   (float*)&sunColor);
+            ImGui::SliderFloat3("Sun dir",   (float*)&sunDir, -1.0f, 1.0f);
+            ImGui::SliderFloat("Czulosc myszy", &mouseSensitivity, 0.02f, 0.4f);
+            ImGui::SliderFloat("Metal roughness (fallback)", &metalMaterial.roughness, 0.0f, 1.0f);
+        }
+
         ImGui::PopItemWidth();
         ImGui::End();
         }
