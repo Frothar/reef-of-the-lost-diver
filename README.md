@@ -8,8 +8,14 @@ wrakami — z latarką w dłoni i bioluminescencją dryfującą w toni. Scena ł
 oświetlenie PBR, cienie, animację szkieletową i pełną podwodną atmosferę (mgła głębi,
 kaustyki, smugi światła, bąbelki).
 
-![Ogólny widok sceny](screenshots/scene_overview.png)
-*Dno, korale, meduzy, bioluminescencja, ryby na splajnie i mgła głębi.*
+<p align="center">
+  <img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.28.png" width="49%" />
+  <img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.35.png" width="49%" />
+</p>
+<p align="center">
+  <img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.48.png" width="49%" />
+  <img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.57.png" width="49%" />
+</p>
 
 ---
 
@@ -154,11 +160,16 @@ Sprawdzone na Apple Silicon (OpenGL 4.1 przez Metal) oraz w VS na Windows.
 
 ## 🖼️ Zrzuty ekranu
 
-![Cienie i materiały](screenshots/materials_shadows.png)
-*Cień kuli na dnie (shadow mapping) i zardzewiały metal (PBR + normal mapping).*
-
-![Panel sterowania](screenshots/ui_panel.png)
-*Panel ImGui z parametrami świateł, mgły, materiałów, cieni i ryb.*
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.28.png" width="100%" /></td>
+    <td align="center"><img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.35.png" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.48.png" width="100%" /></td>
+    <td align="center"><img src="screenshots/Zrzut%20ekranu%202026-06-27%20o%2016.09.57.png" width="100%" /></td>
+  </tr>
+</table>
 
 ---
 
